@@ -1,0 +1,82 @@
+[package]
+name = "lib_ai"
+version = "0.1.0"
+edition = "2021"
+
+[[example]]
+name = "tool_calling"
+path = "examples/tool_calling.rs"
+
+[[example]]
+name = "structured_output"
+path = "examples/structured_output.rs"
+
+[[example]]
+name = "multimodal"
+path = "examples/multimodal.rs"
+
+[[example]]
+name = "agent_basic"
+path = "examples/agent_basic.rs"
+
+[[example]]
+name = "agent_streaming"
+path = "examples/agent_streaming.rs"
+
+[[example]]
+name = "agent_chat"
+path = "examples/agent_chat.rs"
+
+[[example]]
+name = "agent_custom_tools"
+path = "examples/agent_custom_tools.rs"
+
+[[example]]
+name = "agent_with_surrealdb_memory"
+path = "examples/agent_with_surrealdb_memory.rs"
+
+[[example]]
+name = "agent_with_semantic_memory"
+path = "examples/agent_with_semantic_memory.rs"
+
+[[example]]
+name = "embeddings_demo"
+path = "examples/embeddings_demo.rs"
+
+[[example]]
+name = "memory_demo"
+path = "examples/memory_demo.rs"
+
+[[example]]
+name = "structured_agent"
+path = "examples/structured_agent.rs"
+
+[[example]]
+name = "structured_demo"
+path = "examples/structured_demo.rs"
+
+[dependencies]
+tokio = { version = "1.40", features = ["full"] }
+reqwest = { version = "0.12", features = ["json", "stream"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0"
+async-trait = "0.1"
+futures = "0.3"
+bytes = "1.0"
+tokio-stream = { version = "0.1", features = ["io-util"] }
+uuid = { version = "1.0", features = ["v4"] }
+chrono = "0.4"
+rand = "0.8"
+dotenv = "0.15.0"
+surrealdb = { version = "1.0", features = ["protocol-ws", "kv-mem"] }
+
+[dev-dependencies]
+tokio-test = "0.4"
+mockito = "1.0"
+wiremock = "0.6"
+serial_test = "3.0"
+
+[[test]]
+name = "surrealdb_memory_tests"
+path = "tests/surrealdb_memory_tests.rs"
