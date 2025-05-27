@@ -7,6 +7,7 @@ use tokio;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    dotenv::dotenv().ok();
     // Get API key from environment
     let api_key = std::env::var("ANTHROPIC_API_KEY")
         .expect("Please set ANTHROPIC_API_KEY environment variable");

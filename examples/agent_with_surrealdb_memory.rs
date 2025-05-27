@@ -6,6 +6,7 @@ use std::env;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    dotenv::dotenv().ok();
     // Get API key from environment
     let api_key = env::var("OPENAI_API_KEY")
         .expect("OPENAI_API_KEY environment variable must be set");

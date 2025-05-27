@@ -6,6 +6,7 @@ use tokio;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    dotenv::dotenv().ok();
     let api_key = std::env::var("OPENAI_API_KEY")?;
     let provider = OpenAIProvider::new(api_key);
     
