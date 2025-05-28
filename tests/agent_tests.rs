@@ -203,7 +203,9 @@ struct TestTool {
 #[async_trait]
 impl ToolExecutor for TestTool {
     async fn execute(&self, _args: &str) -> Result<ToolResult, Box<dyn std::error::Error>> {
-        Ok(ToolResult::Success(self.return_value.clone()))
+        Ok(ToolResult::Success(serde_json::json!({
+            "result": self.return_value.clone()
+        })))
     }
     
     fn definition(&self) -> lib_ai::ToolFunction {
@@ -237,14 +239,20 @@ async fn test_calculator_tool() {
     // Test addition
     let result = calc.execute(r#"{"operation": "add", "a": 5, "b": 3}"#).await.unwrap();
     match result {
-        ToolResult::Success(val) => assert_eq!(val, "8"),
+        ToolResult::Success(val) => {
+            assert_eq!(val["result"], 8.0);
+            assert_eq!(val["operation"], "add");
+        },
         ToolResult::Error(e) => panic!("Unexpected error: {}", e),
     }
     
     // Test division
     let result = calc.execute(r#"{"operation": "divide", "a": 10, "b": 2}"#).await.unwrap();
     match result {
-        ToolResult::Success(val) => assert_eq!(val, "5"),
+        ToolResult::Success(val) => {
+            assert_eq!(val["result"], 5.0);
+            assert_eq!(val["operation"], "divide");
+        },
         ToolResult::Error(e) => panic!("Unexpected error: {}", e),
     }
     

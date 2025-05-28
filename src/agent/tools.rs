@@ -8,7 +8,7 @@ use crate::{Tool, ToolType, ToolFunction};
 /// Result of a tool execution
 #[derive(Debug, Clone)]
 pub enum ToolResult {
-    Success(String),
+    Success(Value),
     Error(String),
 }
 
@@ -137,7 +137,12 @@ impl ToolExecutor for CalculatorTool {
             _ => return Ok(ToolResult::Error(format!("Unknown operation: {}", operation))),
         };
         
-        Ok(ToolResult::Success(result.to_string()))
+        Ok(ToolResult::Success(serde_json::json!({
+            "result": result,
+            "operation": operation,
+            "a": a,
+            "b": b
+        })))
     }
     
     fn definition(&self) -> ToolFunction {
@@ -199,7 +204,11 @@ impl ToolExecutor for WebFetchTool {
                     } else {
                         text
                     };
-                    Ok(ToolResult::Success(truncated))
+                    Ok(ToolResult::Success(serde_json::json!({
+                        "url": url,
+                        "status": response.status().as_u16(),
+                        "content": truncated
+                    })))
                 } else {
                     Ok(ToolResult::Error(format!("HTTP {}", response.status())))
                 }
@@ -257,8 +266,16 @@ impl ToolExecutor for KeyValueStoreTool {
         match action {
             "get" => {
                 match store.get(key) {
-                    Some(value) => Ok(ToolResult::Success(value.clone())),
-                    None => Ok(ToolResult::Success("null".to_string())),
+                    Some(value) => Ok(ToolResult::Success(serde_json::json!({
+                        "key": key,
+                        "value": value,
+                        "found": true
+                    }))),
+                    None => Ok(ToolResult::Success(serde_json::json!({
+                        "key": key,
+                        "value": null,
+                        "found": false
+                    }))),
                 }
             }
             "set" => {
@@ -266,15 +283,27 @@ impl ToolExecutor for KeyValueStoreTool {
                     .as_str()
                     .ok_or("Missing value for set action")?;
                 store.insert(key.to_string(), value.to_string());
-                Ok(ToolResult::Success("OK".to_string()))
+                Ok(ToolResult::Success(serde_json::json!({
+                    "key": key,
+                    "value": value,
+                    "action": "set",
+                    "success": true
+                })))
             }
             "delete" => {
                 store.remove(key);
-                Ok(ToolResult::Success("OK".to_string()))
+                Ok(ToolResult::Success(serde_json::json!({
+                    "key": key,
+                    "action": "delete",
+                    "success": true
+                })))
             }
             "list" => {
                 let keys: Vec<&str> = store.keys().map(|k| k.as_str()).collect();
-                Ok(ToolResult::Success(serde_json::to_string(&keys)?))
+                Ok(ToolResult::Success(serde_json::json!({
+                    "keys": keys,
+                    "count": keys.len()
+                })))
             }
             _ => Ok(ToolResult::Error(format!("Unknown action: {}", action))),
         }
@@ -317,7 +346,7 @@ pub struct FunctionTool<F> {
 
 impl<F> FunctionTool<F>
 where
-    F: Fn(&str) -> Result<String, Box<dyn std::error::Error>> + Send + Sync,
+    F: Fn(&str) -> Result<Value, Box<dyn std::error::Error>> + Send + Sync,
 {
     pub fn new(name: String, description: String, parameters: Value, func: F) -> Self {
         Self {
@@ -332,7 +361,7 @@ where
 #[async_trait]
 impl<F> ToolExecutor for FunctionTool<F>
 where
-    F: Fn(&str) -> Result<String, Box<dyn std::error::Error>> + Send + Sync,
+    F: Fn(&str) -> Result<Value, Box<dyn std::error::Error>> + Send + Sync,
 {
     async fn execute(&self, arguments: &str) -> Result<ToolResult, Box<dyn std::error::Error>> {
         match (self.func)(arguments) {
@@ -360,7 +389,10 @@ mod tests {
         
         let result = calc.execute(r#"{"operation": "add", "a": 5, "b": 3}"#).await.unwrap();
         match result {
-            ToolResult::Success(val) => assert_eq!(val, "8"),
+            ToolResult::Success(val) => {
+                assert_eq!(val["result"], 8.0);
+                assert_eq!(val["operation"], "add");
+            },
             ToolResult::Error(e) => panic!("Unexpected error: {}", e),
         }
     }

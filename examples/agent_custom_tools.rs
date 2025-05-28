@@ -18,7 +18,10 @@ impl ToolExecutor for TimeTool {
         let now = Local::now();
         let time_str = now.format("%Y-%m-%d %H:%M:%S %Z").to_string();
         
-        Ok(ToolResult::Success(time_str))
+        Ok(ToolResult::Success(json!({
+            "time": time_str,
+            "timezone": "local"
+        })))
     }
     
     fn definition(&self) -> ToolFunction {
@@ -71,7 +74,7 @@ impl ToolExecutor for DiceTool {
             "dice": format!("{}d{}", num_dice, sides)
         });
         
-        Ok(ToolResult::Success(serde_json::to_string(&response)?))
+        Ok(ToolResult::Success(response))
     }
     
     fn definition(&self) -> ToolFunction {

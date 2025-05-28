@@ -269,7 +269,7 @@ impl Agent {
             .map_err(|e| AgentError::ToolError(e.to_string()))?;
         
         match result {
-            ToolResult::Success(value) => Ok(value),
+            ToolResult::Success(value) => Ok(serde_json::to_string(&value).unwrap_or_else(|_| value.to_string())),
             ToolResult::Error(error) => Err(AgentError::ToolError(error)),
         }
     }
