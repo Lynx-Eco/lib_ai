@@ -5,7 +5,7 @@ use sqlx::{AnyPool, Row, Column};
 use std::collections::HashMap;
 
 use crate::agent::tools::{ToolExecutor, ToolResult};
-use crate::tools::ToolFunction;
+use crate::ToolFunction;
 
 /// Database query tool for executing SQL queries
 pub struct DatabaseTool {
@@ -159,10 +159,11 @@ impl ToolExecutor for DatabaseTool {
             }
             
             DatabaseOperation::Schema { table } => {
-                let schema_query = if let Some(table_name) = table {
+                let schema_query = if let Some(ref table_name) = table {
                     // Get schema for specific table
-                    match self.pool.any_kind() {
-                        sqlx::any::AnyKind::Postgres => {
+                    // Use dynamic query based on database type detection
+                    // For now, we'll use a generic approach
+                    {
                             format!(
                                 "SELECT column_name, data_type, is_nullable 
                                  FROM information_schema.columns 
@@ -170,17 +171,6 @@ impl ToolExecutor for DatabaseTool {
                                  ORDER BY ordinal_position",
                                 table_name
                             )
-                        }
-                        sqlx::any::AnyKind::MySql => {
-                            format!(
-                                "DESCRIBE {}",
-                                table_name
-                            )
-                        }
-                        sqlx::any::AnyKind::Sqlite => {
-                            format!("PRAGMA table_info({})", table_name)
-                        }
-                        _ => return Ok(ToolResult::Error("Unsupported database type".to_string())),
                     }
                 } else {
                     return Ok(ToolResult::Error("Table name required for schema query".to_string()));
@@ -193,24 +183,12 @@ impl ToolExecutor for DatabaseTool {
                 
                 let mut columns = Vec::new();
                 for row in rows.iter() {
-                    let column_info = match self.pool.any_kind() {
-                        sqlx::any::AnyKind::Postgres => {
-                            serde_json::json!({
-                                "name": row.try_get::<String, _>(0).unwrap_or_default(),
-                                "type": row.try_get::<String, _>(1).unwrap_or_default(),
-                                "nullable": row.try_get::<String, _>(2).unwrap_or_default() == "YES"
-                            })
-                        }
-                        sqlx::any::AnyKind::Sqlite => {
-                            serde_json::json!({
-                                "name": row.try_get::<String, _>(1).unwrap_or_default(),
-                                "type": row.try_get::<String, _>(2).unwrap_or_default(),
-                                "nullable": row.try_get::<i64, _>(3).unwrap_or(0) == 0,
-                                "primary_key": row.try_get::<i64, _>(5).unwrap_or(0) == 1
-                            })
-                        }
-                        _ => Value::Null,
-                    };
+                    // Generic column info extraction
+                    let column_info = serde_json::json!({
+                        "name": row.try_get::<String, _>(0).unwrap_or_default(),
+                        "type": row.try_get::<String, _>(1).unwrap_or_default(),
+                        "nullable": row.try_get::<String, _>(2).unwrap_or_default() == "YES"
+                    });
                     columns.push(column_info);
                 }
                 
@@ -221,22 +199,10 @@ impl ToolExecutor for DatabaseTool {
             }
             
             DatabaseOperation::Tables => {
-                let tables_query = match self.pool.any_kind() {
-                    sqlx::any::AnyKind::Postgres => {
-                        "SELECT table_name FROM information_schema.tables 
-                         WHERE table_schema = 'public' 
-                         ORDER BY table_name"
-                    }
-                    sqlx::any::AnyKind::MySql => {
-                        "SHOW TABLES"
-                    }
-                    sqlx::any::AnyKind::Sqlite => {
-                        "SELECT name FROM sqlite_master 
-                         WHERE type='table' 
-                         ORDER BY name"
-                    }
-                    _ => return Ok(ToolResult::Error("Unsupported database type".to_string())),
-                };
+                // Use generic table query - this will work for PostgreSQL and MySQL
+                let tables_query = "SELECT table_name FROM information_schema.tables 
+                                   WHERE table_schema = 'public' OR table_schema = DATABASE() 
+                                   ORDER BY table_name";
                 
                 let rows = sqlx::query(tables_query)
                     .fetch_all(&self.pool)

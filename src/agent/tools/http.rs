@@ -6,7 +6,7 @@ use std::time::Duration;
 use std::collections::HashMap;
 
 use crate::agent::tools::{ToolExecutor, ToolResult};
-use crate::tools::ToolFunction;
+use crate::ToolFunction;
 
 /// HTTP client tool for making API requests
 pub struct HttpTool {
@@ -68,9 +68,10 @@ impl HttpTool {
     
     /// Add default header
     pub fn add_default_header(mut self, key: &str, value: &str) -> Self {
+        use reqwest::header::{HeaderName, HeaderValue};
         self.default_headers.insert(
-            key.parse().unwrap(),
-            value.parse().unwrap()
+            HeaderName::from_bytes(key.as_bytes()).unwrap(),
+            HeaderValue::from_str(value).unwrap()
         );
         self
     }

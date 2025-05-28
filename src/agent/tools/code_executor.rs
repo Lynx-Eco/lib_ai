@@ -7,7 +7,7 @@ use tokio::process::Command;
 use tokio::time::timeout;
 
 use crate::agent::tools::{ToolExecutor, ToolResult};
-use crate::tools::ToolFunction;
+use crate::ToolFunction;
 
 /// Code execution tool for running code in various languages
 pub struct CodeExecutorTool {

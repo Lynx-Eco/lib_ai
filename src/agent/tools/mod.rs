@@ -1,5 +1,6 @@
-// Re-export base tools functionality from parent module
-pub use super::tools::{ToolExecutor, ToolResult, ToolRegistry};
+// Base tools functionality
+mod base;
+pub use base::{ToolExecutor, ToolResult, ToolRegistry, CalculatorTool, WebFetchTool, KeyValueStoreTool, FunctionTool};
 
 // Tool implementations
 mod filesystem;

@@ -1,6 +1,6 @@
 use lib_ai::{
-    client::Client,
     agent::{AgentBuilder, FileSystemTool, HttpTool, CodeExecutorTool},
+    providers::OpenAIProvider,
 };
 use std::error::Error;
 use tempfile::TempDir;
@@ -9,8 +9,10 @@ use tempfile::TempDir;
 async fn main() -> Result<(), Box<dyn Error>> {
     dotenv::dotenv().ok();
     
-    // Create client
-    let client = Client::new();
+    // Create provider
+    let api_key = std::env::var("OPENAI_API_KEY")
+        .expect("OPENAI_API_KEY must be set");
+    let provider = OpenAIProvider::new(api_key);
     
     // Create a temporary directory for file operations
     let temp_dir = TempDir::new()?;
@@ -32,44 +34,44 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .add_allowed_language("javascript");
     
     // Create agent with tools
-    let mut agent = AgentBuilder::new(client)
-        .with_system_prompt("You are a helpful assistant with access to file system, HTTP, and code execution tools.")
-        .with_tool(fs_tool)
-        .with_tool(http_tool)
-        .with_tool(code_tool)
-        .build()
-        .await?;
+    let mut agent = AgentBuilder::new()
+        .provider(provider)
+        .prompt("You are a helpful assistant with access to file system, HTTP, and code execution tools.")
+        .tool("filesystem", fs_tool)
+        .tool("http", http_tool)
+        .tool("code_executor", code_tool)
+        .build()?;
     
     // Example 1: File system operations
     println!("\n=== File System Operations ===");
-    let response = agent.chat("Create a file called 'test.txt' with the content 'Hello from AI Agent!'").await?;
-    println!("Agent: {}", response.content);
+    let response = agent.execute("Create a file called 'test.txt' with the content 'Hello from AI Agent!'").await?;
+    println!("Agent: {}", response);
     
-    let response = agent.chat("Now read the contents of test.txt").await?;
-    println!("Agent: {}", response.content);
+    let response = agent.execute("Now read the contents of test.txt").await?;
+    println!("Agent: {}", response);
     
     // Example 2: HTTP requests
     println!("\n=== HTTP Requests ===");
-    let response = agent.chat("Fetch information about the Rust programming language repository from GitHub API (rust-lang/rust)").await?;
-    println!("Agent: {}", response.content);
+    let response = agent.execute("Fetch information about the Rust programming language repository from GitHub API (rust-lang/rust)").await?;
+    println!("Agent: {}", response);
     
     // Example 3: Code execution
     println!("\n=== Code Execution ===");
-    let response = agent.chat("Write and execute a Python script that calculates the first 10 Fibonacci numbers").await?;
-    println!("Agent: {}", response.content);
+    let response = agent.execute("Write and execute a Python script that calculates the first 10 Fibonacci numbers").await?;
+    println!("Agent: {}", response);
     
-    let response = agent.chat("Now do the same in JavaScript").await?;
-    println!("Agent: {}", response.content);
+    let response = agent.execute("Now do the same in JavaScript").await?;
+    println!("Agent: {}", response);
     
     // Example 4: Combined operations
     println!("\n=== Combined Operations ===");
-    let response = agent.chat("
+    let response = agent.execute("
         1. Fetch the current Bitcoin price from a public API
         2. Save the price to a file called 'bitcoin_price.json'
         3. Write a Python script that reads this file and displays the price
         4. Execute the script
     ").await?;
-    println!("Agent: {}", response.content);
+    println!("Agent: {}", response);
     
     Ok(())
 }

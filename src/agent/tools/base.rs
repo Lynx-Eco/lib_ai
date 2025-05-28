@@ -196,7 +196,8 @@ impl ToolExecutor for WebFetchTool {
         
         match self.client.get(url).send().await {
             Ok(response) => {
-                if response.status().is_success() {
+                let status = response.status();
+                if status.is_success() {
                     let text = response.text().await?;
                     // Truncate if too long
                     let truncated = if text.len() > 1000 {
@@ -206,11 +207,11 @@ impl ToolExecutor for WebFetchTool {
                     };
                     Ok(ToolResult::Success(serde_json::json!({
                         "url": url,
-                        "status": response.status().as_u16(),
+                        "status": status.as_u16(),
                         "content": truncated
                     })))
                 } else {
-                    Ok(ToolResult::Error(format!("HTTP {}", response.status())))
+                    Ok(ToolResult::Error(format!("HTTP {}", status)))
                 }
             }
             Err(e) => Ok(ToolResult::Error(format!("Request failed: {}", e))),

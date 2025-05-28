@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::agent::tools::{ToolExecutor, ToolResult};
-use crate::tools::ToolFunction;
+use crate::ToolFunction;
 
 /// File system tool for reading and writing files
 pub struct FileSystemTool {
