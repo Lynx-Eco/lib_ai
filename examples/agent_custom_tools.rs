@@ -129,7 +129,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         |args| {
             let parsed: serde_json::Value = serde_json::from_str(args)?;
             let text = parsed["text"].as_str().ok_or("Missing text")?;
-            Ok(text.to_uppercase())
+            Ok(json!({
+                "result": text.to_uppercase()
+            }))
         },
     );
     
