@@ -237,57 +237,22 @@ impl ToolExecutor for FileSystemTool {
             description: Some("Perform file system operations like read, write, list, delete, etc.".to_string()),
             parameters: serde_json::json!({
                 "type": "object",
-                "oneOf": [
-                    {
-                        "type": "object",
-                        "properties": {
-                            "operation": { "type": "string", "const": "read" },
-                            "path": { "type": "string", "description": "Path to the file to read" }
-                        },
-                        "required": ["operation", "path"]
+                "properties": {
+                    "operation": {
+                        "type": "string",
+                        "enum": ["read", "write", "list", "delete", "exists", "create_dir"],
+                        "description": "The file system operation to perform"
                     },
-                    {
-                        "type": "object",
-                        "properties": {
-                            "operation": { "type": "string", "const": "write" },
-                            "path": { "type": "string", "description": "Path to write the file" },
-                            "content": { "type": "string", "description": "Content to write" }
-                        },
-                        "required": ["operation", "path", "content"]
+                    "path": {
+                        "type": "string",
+                        "description": "Path to the file or directory"
                     },
-                    {
-                        "type": "object",
-                        "properties": {
-                            "operation": { "type": "string", "const": "list" },
-                            "path": { "type": "string", "description": "Directory path (optional)" }
-                        },
-                        "required": ["operation"]
-                    },
-                    {
-                        "type": "object",
-                        "properties": {
-                            "operation": { "type": "string", "const": "delete" },
-                            "path": { "type": "string", "description": "Path to delete" }
-                        },
-                        "required": ["operation", "path"]
-                    },
-                    {
-                        "type": "object",
-                        "properties": {
-                            "operation": { "type": "string", "const": "exists" },
-                            "path": { "type": "string", "description": "Path to check" }
-                        },
-                        "required": ["operation", "path"]
-                    },
-                    {
-                        "type": "object",
-                        "properties": {
-                            "operation": { "type": "string", "const": "create_dir" },
-                            "path": { "type": "string", "description": "Directory path to create" }
-                        },
-                        "required": ["operation", "path"]
+                    "content": {
+                        "type": "string",
+                        "description": "Content to write (only for write operation)"
                     }
-                ]
+                },
+                "required": ["operation", "path"]
             }),
         }
     }

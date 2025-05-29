@@ -229,36 +229,27 @@ impl ToolExecutor for DatabaseTool {
             description: Some("Execute SQL queries and explore database schema".to_string()),
             parameters: serde_json::json!({
                 "type": "object",
-                "oneOf": [
-                    {
-                        "type": "object",
-                        "properties": {
-                            "operation": { "type": "string", "const": "query" },
-                            "sql": { "type": "string", "description": "SQL query to execute" },
-                            "params": {
-                                "type": "array",
-                                "description": "Optional query parameters",
-                                "items": {}
-                            }
-                        },
-                        "required": ["operation", "sql"]
+                "properties": {
+                    "operation": {
+                        "type": "string",
+                        "enum": ["query", "schema", "tables"],
+                        "description": "The database operation to perform"
                     },
-                    {
-                        "type": "object",
-                        "properties": {
-                            "operation": { "type": "string", "const": "schema" },
-                            "table": { "type": "string", "description": "Table name to get schema for" }
-                        },
-                        "required": ["operation", "table"]
+                    "sql": {
+                        "type": "string",
+                        "description": "SQL query to execute (only for query operation)"
                     },
-                    {
-                        "type": "object",
-                        "properties": {
-                            "operation": { "type": "string", "const": "tables" }
-                        },
-                        "required": ["operation"]
+                    "params": {
+                        "type": "array",
+                        "description": "Optional query parameters (only for query operation)",
+                        "items": {}
+                    },
+                    "table": {
+                        "type": "string",
+                        "description": "Table name to get schema for (only for schema operation)"
                     }
-                ]
+                },
+                "required": ["operation"]
             }),
         }
     }
