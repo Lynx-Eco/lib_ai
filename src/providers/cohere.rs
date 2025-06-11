@@ -146,13 +146,14 @@ impl CompletionProvider for CohereProvider {
             .send()
             .await?;
 
-        if !response.status().is_success() {
+        let status = response.status();
+        if !status.is_success() {
             let error_text = response.text().await?;
             return Err(AiError::ProviderError {
                 provider: "cohere".to_string(),
                 message: format!("Cohere API error: {}", error_text),
                 error_code: None,
-                retryable: response.status().is_server_error(),
+                retryable: status.is_server_error(),
             });
         }
 
@@ -219,13 +220,14 @@ impl CompletionProvider for CohereProvider {
             .send()
             .await?;
 
-        if !response.status().is_success() {
+        let status = response.status();
+        if !status.is_success() {
             let error_text = response.text().await?;
             return Err(AiError::ProviderError {
                 provider: "cohere".to_string(),
                 message: format!("Cohere API error: {}", error_text),
                 error_code: None,
-                retryable: response.status().is_server_error(),
+                retryable: status.is_server_error(),
             });
         }
 

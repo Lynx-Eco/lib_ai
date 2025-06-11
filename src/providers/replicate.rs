@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use futures::stream::{Stream, StreamExt};
+use futures::stream::Stream;
 use std::pin::Pin;
 use std::env;
 use std::time::Duration;
@@ -10,7 +10,7 @@ use tokio::time::sleep;
 
 use crate::{
     CompletionProvider, CompletionRequest, CompletionResponse, StreamChunk,
-    Message, MessageContent, Role, Choice, Usage, AiError, Result,
+    Message, MessageContent, Role, Choice, AiError, Result,
 };
 
 /// Replicate provider for open-source models
@@ -201,13 +201,14 @@ impl CompletionProvider for ReplicateProvider {
             .send()
             .await?;
 
-        if !response.status().is_success() {
+        let status = response.status();
+        if !status.is_success() {
             let error_text = response.text().await?;
             return Err(AiError::ProviderError {
                 provider: "replicate".to_string(),
                 message: format!("Replicate API error: {}", error_text),
                 error_code: None,
-                retryable: response.status().is_server_error(),
+                retryable: status.is_server_error(),
             });
         }
 

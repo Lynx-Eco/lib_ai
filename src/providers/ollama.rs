@@ -3,12 +3,10 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use futures::stream::{Stream, StreamExt};
 use std::pin::Pin;
-use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio_stream::wrappers::LinesStream;
 
 use crate::{
     CompletionProvider, CompletionRequest, CompletionResponse, StreamChunk,
-    Message, MessageContent, Role, Choice, Usage, AiError, Result, Tool, ToolChoice, ResponseFormat,
+    Message, MessageContent, Role, Choice, Usage, AiError, Result,
 };
 
 /// Ollama provider for local LLM support
@@ -175,13 +173,14 @@ impl CompletionProvider for OllamaProvider {
             .send()
             .await?;
 
-        if !response.status().is_success() {
+        let status = response.status();
+        if !status.is_success() {
             let error_text = response.text().await?;
             return Err(AiError::ProviderError {
                 provider: "ollama".to_string(),
                 message: format!("Ollama API error: {}", error_text),
                 error_code: None,
-                retryable: response.status().is_server_error(),
+                retryable: status.is_server_error(),
             });
         }
 
@@ -227,13 +226,14 @@ impl CompletionProvider for OllamaProvider {
             .send()
             .await?;
 
-        if !response.status().is_success() {
+        let status = response.status();
+        if !status.is_success() {
             let error_text = response.text().await?;
             return Err(AiError::ProviderError {
                 provider: "ollama".to_string(),
                 message: format!("Ollama API error: {}", error_text),
                 error_code: None,
-                retryable: response.status().is_server_error(),
+                retryable: status.is_server_error(),
             });
         }
 
@@ -292,7 +292,7 @@ impl CompletionProvider for OllamaProvider {
     }
 
     fn default_model(&self) -> &'static str {
-        &self.default_model
+        "llama2"
     }
 
     fn available_models(&self) -> Vec<&'static str> {

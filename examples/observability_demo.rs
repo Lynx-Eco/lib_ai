@@ -1,10 +1,11 @@
 use std::sync::Arc;
 use std::time::Duration;
+use std::collections::HashMap;
 use lib_ai::{
     agent::AgentBuilder, CompletionProvider,
     observability::{
         MetricsCollector, AgentTracer, CostTracker, TelemetryExporter,
-        telemetry::{ConsoleExporter, FileExporter, TelemetryData},
+        telemetry::{TelemetryConfig, ExporterConfig, ExporterType},
         tracing::TracingConfig,
     },
     agent::tools::{CalculatorTool, WebFetchTool},
@@ -77,12 +78,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         max_spans_per_trace: 100,
         export_interval: Duration::from_secs(30),
     }));
-    let cost_tracker = Arc::new(std::sync::RwLock::new(CostTracker::new()));
+    // Create two cost trackers due to type mismatch between builder and telemetry
+    let cost_tracker_for_agent = Arc::new(std::sync::RwLock::new(CostTracker::new()));
+    let cost_tracker_for_telemetry = Arc::new(tokio::sync::RwLock::new(CostTracker::new()));
     
     // Create telemetry exporter
-    let telemetry_config = lib_ai::observability::telemetry::TelemetryConfig {
+    let telemetry_config = TelemetryConfig {
         enabled: true,
         export_interval: Duration::from_secs(30),
+        exporters: vec![
+            ExporterConfig {
+                name: "console".to_string(),
+                enabled: true,
+                exporter_type: ExporterType::Console,
+                endpoint: None,
+                headers: HashMap::new(),
+            },
+            ExporterConfig {
+                name: "file".to_string(),
+                enabled: true,
+                exporter_type: ExporterType::File { path: "telemetry.log".to_string() },
+                endpoint: None,
+                headers: HashMap::new(),
+            },
+        ],
         batch_size: 100,
         max_queue_size: 1000,
     };
@@ -90,7 +109,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         telemetry_config,
         metrics_collector.clone(),
         tracer.clone(),
-        cost_tracker.clone(),
+        cost_tracker_for_telemetry.clone(),
     ));
 
     // Create agent with observability
@@ -104,7 +123,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_observability(
             metrics_collector.clone(),
             tracer.clone(),
-            cost_tracker.clone(),
+            cost_tracker_for_agent.clone(),
             telemetry_exporter.clone(),
         )
         .build()?;
@@ -154,17 +173,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 0.0
             }
         );
-        println!("  Average Response Time: {:.2}ms", metrics.average_response_time_ms);
-        println!("  Total Tokens: {}", metrics.total_tokens.total_tokens);
+        println!("  Average Response Time: {:.2}ms", metrics.average_response_time.as_millis());
+        println!("  Total Tokens: {}", metrics.total_tokens.total());
         println!("  Total Cost: ${:.6}", metrics.total_cost);
         
-        if !metrics.tool_executions.is_empty() {
+        if !metrics.tool_usage.is_empty() {
             println!("  Tool Executions:");
-            for (tool_name, tool_metrics) in &metrics.tool_executions {
+            for (tool_name, tool_metrics) in &metrics.tool_usage {
                 println!("    {}: {} executions, {:.2}ms avg", 
                     tool_name, 
-                    tool_metrics.total_executions,
-                    tool_metrics.average_execution_time_ms
+                    tool_metrics.executions,
+                    tool_metrics.average_duration.as_millis()
                 );
             }
         }
@@ -175,14 +194,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("\n🌍 Global Metrics:");
         println!("  Total Agents: {}", global_metrics.total_agents);
         println!("  Total Requests: {}", global_metrics.total_requests);
-        println!("  Total Tokens: {}", global_metrics.total_tokens.total_tokens);
+        println!("  Total Tokens: {}", global_metrics.total_tokens.total());
         println!("  Total Cost: ${:.6}", global_metrics.total_cost);
 
     // Display cost breakdown
     println!("\n💰 Cost Breakdown:");
     println!("==================");
     
-    if let Ok(cost_tracker_guard) = cost_tracker.read() {
+    if let Ok(cost_tracker_guard) = cost_tracker_for_agent.read() {
         let report = cost_tracker_guard.generate_report();
         println!("Total Cost: ${:.6}", report.total_cost);
         
@@ -201,12 +220,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let all_traces = tracer.get_all_traces();
     println!("Total Traces: {}", all_traces.len());
     
-    for (i, trace) in all_traces.iter().take(3).enumerate() {
-        println!("Trace {}: {} ({}ms)", 
-            i + 1, 
-            trace.operation_name,
-            trace.duration_ms
-        );
+    for (i, (trace_id, events)) in all_traces.iter().take(3).enumerate() {
+        if let Some(first_event) = events.first() {
+            let duration = events.iter()
+                .filter_map(|e| e.duration)
+                .map(|d| d.as_millis())
+                .sum::<u128>();
+            
+            println!("Trace {}: {} - {} ({}ms)", 
+                i + 1, 
+                trace_id,
+                first_event.operation_name,
+                duration
+            );
+        }
     }
 
     // Export telemetry data

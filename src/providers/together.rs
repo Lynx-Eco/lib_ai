@@ -126,13 +126,14 @@ impl CompletionProvider for TogetherProvider {
             .send()
             .await?;
 
-        if !response.status().is_success() {
+        let status = response.status();
+        if !status.is_success() {
             let error_text = response.text().await?;
             return Err(AiError::ProviderError {
                 provider: "together".to_string(),
                 message: format!("Together AI API error: {}", error_text),
                 error_code: None,
-                retryable: response.status().is_server_error(),
+                retryable: status.is_server_error(),
             });
         }
 
@@ -178,13 +179,14 @@ impl CompletionProvider for TogetherProvider {
             .send()
             .await?;
 
-        if !response.status().is_success() {
+        let status = response.status();
+        if !status.is_success() {
             let error_text = response.text().await?;
             return Err(AiError::ProviderError {
                 provider: "together".to_string(),
                 message: format!("Together AI API error: {}", error_text),
                 error_code: None,
-                retryable: response.status().is_server_error(),
+                retryable: status.is_server_error(),
             });
         }
 
@@ -319,9 +321,15 @@ struct TogetherChatRequest {
     response_format: Option<TogetherResponseFormat>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 struct TogetherMessage {
     role: &'static str,
+    content: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct TogetherMessageResponse {
+    role: String,
     content: String,
 }
 
@@ -342,7 +350,7 @@ struct TogetherResponse {
 #[derive(Debug, Clone, Deserialize)]
 struct TogetherChoice {
     index: u32,
-    message: TogetherMessage,
+    message: TogetherMessageResponse,
     #[serde(default)]
     finish_reason: Option<String>,
 }
