@@ -1,4 +1,4 @@
-use lib_ai::agent::{TypedAgentBuilder, StructuredOutput, AgentBuilder, JsonSchemaProvider};
+use lib_ai::agent::{TypedAgentBuilder, StructuredOutput, AgentBuilder, StructuredProvider};
 use lib_ai::providers::OpenAIProvider;
 use lib_ai::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -14,8 +14,8 @@ struct WeatherInfo {
     wind_speed: f32,
 }
 
-// Implement JsonSchemaProvider for WeatherInfo
-impl JsonSchemaProvider for WeatherInfo {
+// Implement StructuredProvider for WeatherInfo
+impl StructuredProvider for WeatherInfo {
     fn schema() -> JsonSchema {
         JsonSchema {
             name: "WeatherInfo".to_string(),
@@ -45,7 +45,7 @@ struct CodeAnalysis {
     estimated_time: f32,
 }
 
-impl JsonSchemaProvider for CodeAnalysis {
+impl StructuredProvider for CodeAnalysis {
     fn schema() -> JsonSchema {
         JsonSchema {
             name: "CodeAnalysis".to_string(),
@@ -166,7 +166,7 @@ print(result)
         difficulty: String,
     }
     
-    impl JsonSchemaProvider for TaskList {
+    impl StructuredProvider for TaskList {
         fn schema() -> JsonSchema {
             JsonSchema {
                 name: "TaskList".to_string(),

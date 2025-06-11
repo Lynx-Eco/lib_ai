@@ -34,7 +34,7 @@ impl OpenRouterProvider {
 
         if !response.status().is_success() {
             let error_text = response.text().await?;
-            return Err(AiError::ProviderError(format!("OpenRouter API error: {}", error_text)));
+            return Err(AiError::ProviderError { provider: "openrouter".to_string(), message: format!("OpenRouter API error: {}", error_text), error_code: None, retryable: true });
         }
 
         let models_response: OpenRouterModelsResponse = response.json().await?;

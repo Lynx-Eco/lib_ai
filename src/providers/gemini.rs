@@ -109,7 +109,7 @@ impl CompletionProvider for GeminiProvider {
 
         if !response.status().is_success() {
             let error_text = response.text().await?;
-            return Err(AiError::ProviderError(format!("Gemini API error: {}", error_text)));
+            return Err(AiError::ProviderError { provider: "gemini".to_string(), message: format!("Gemini API error: {}", error_text), error_code: None, retryable: true });
         }
 
         let gemini_response: GeminiResponse = response.json().await?;
@@ -178,7 +178,7 @@ impl CompletionProvider for GeminiProvider {
 
         if !response.status().is_success() {
             let error_text = response.text().await?;
-            return Err(AiError::ProviderError(format!("Gemini API error: {}", error_text)));
+            return Err(AiError::ProviderError { provider: "gemini".to_string(), message: format!("Gemini API error: {}", error_text), error_code: None, retryable: true });
         }
 
         let stream = response.bytes_stream();
@@ -188,7 +188,7 @@ impl CompletionProvider for GeminiProvider {
                     let text = String::from_utf8_lossy(&bytes);
                     parse_gemini_stream(&text, &model_name)
                 }
-                Err(e) => Err(AiError::StreamError(e.to_string())),
+                Err(e) => Err(AiError::StreamError { message: e.to_string(), retryable: true }),
             }
         }).filter_map(|result| async move {
             match result {

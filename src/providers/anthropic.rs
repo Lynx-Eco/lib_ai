@@ -178,7 +178,7 @@ impl CompletionProvider for AnthropicProvider {
 
         if !response.status().is_success() {
             let error_text = response.text().await?;
-            return Err(AiError::ProviderError(format!("Anthropic API error: {}", error_text)));
+            return Err(AiError::ProviderError { provider: "anthropic".to_string(), message: format!("Anthropic API error: {}", error_text), error_code: None, retryable: true });
         }
 
         let anthropic_response: AnthropicResponse = response.json().await?;
@@ -286,7 +286,7 @@ impl CompletionProvider for AnthropicProvider {
 
         if !response.status().is_success() {
             let error_text = response.text().await?;
-            return Err(AiError::ProviderError(format!("Anthropic API error: {}", error_text)));
+            return Err(AiError::ProviderError { provider: "anthropic".to_string(), message: format!("Anthropic API error: {}", error_text), error_code: None, retryable: true });
         }
 
         let stream = response.bytes_stream();
@@ -296,7 +296,7 @@ impl CompletionProvider for AnthropicProvider {
                     let text = String::from_utf8_lossy(&bytes);
                     parse_anthropic_sse(&text)
                 }
-                Err(e) => Err(AiError::StreamError(e.to_string())),
+                Err(e) => Err(AiError::StreamError { message: e.to_string(), retryable: true }),
             }
         }).filter_map(|result| async move {
             match result {

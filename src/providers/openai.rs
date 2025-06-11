@@ -226,7 +226,7 @@ impl CompletionProvider for OpenAIProvider {
 
         if !response.status().is_success() {
             let error_text = response.text().await?;
-            return Err(AiError::ProviderError(format!("OpenAI API error: {}", error_text)));
+            return Err(AiError::ProviderError { provider: "openai".to_string(), message: format!("OpenAI API error: {}", error_text), error_code: None, retryable: true });
         }
 
         let openai_response: OpenAIResponse = response.json().await?;
@@ -261,7 +261,7 @@ impl CompletionProvider for OpenAIProvider {
 
         if !response.status().is_success() {
             let error_text = response.text().await?;
-            return Err(AiError::ProviderError(format!("OpenAI API error: {}", error_text)));
+            return Err(AiError::ProviderError { provider: "openai".to_string(), message: format!("OpenAI API error: {}", error_text), error_code: None, retryable: true });
         }
 
         let stream = response.bytes_stream();
@@ -271,7 +271,7 @@ impl CompletionProvider for OpenAIProvider {
                     let text = String::from_utf8_lossy(&bytes);
                     parse_openai_sse(&text)
                 }
-                Err(e) => Err(AiError::StreamError(e.to_string())),
+                Err(e) => Err(AiError::StreamError { message: e.to_string(), retryable: true }),
             }
         }).filter_map(|result| async move {
             match result {

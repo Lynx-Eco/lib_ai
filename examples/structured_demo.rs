@@ -1,4 +1,4 @@
-use lib_ai::agent::JsonSchemaProvider;
+use lib_ai::agent::StructuredProvider;
 use lib_ai::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -10,7 +10,7 @@ struct Person {
     email: String,
 }
 
-impl JsonSchemaProvider for Person {
+impl StructuredProvider for Person {
     fn schema() -> JsonSchema {
         JsonSchema {
             name: "Person".to_string(),
@@ -29,7 +29,7 @@ impl JsonSchemaProvider for Person {
     }
 }
 
-// Example 2: Using the macro (simplified version)
+// Example 2: Manual implementation for Product
 #[derive(Debug, Serialize, Deserialize, Default)]
 struct Product {
     id: String,
@@ -38,8 +38,25 @@ struct Product {
     in_stock: bool,
 }
 
-// Use the macro to implement JsonSchemaProvider
-lib_ai::impl_json_schema!(Product);
+impl StructuredProvider for Product {
+    fn schema() -> JsonSchema {
+        JsonSchema {
+            name: "Product".to_string(),
+            description: Some("Product information".to_string()),
+            schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "id": { "type": "string", "description": "Product ID" },
+                    "name": { "type": "string", "description": "Product name" },
+                    "price": { "type": "number", "minimum": 0 },
+                    "in_stock": { "type": "boolean" }
+                },
+                "required": ["id", "name", "price", "in_stock"]
+            }),
+            strict: Some(true),
+        }
+    }
+}
 
 // Example 3: Nested structures
 #[derive(Debug, Serialize, Deserialize)]
@@ -68,7 +85,7 @@ enum OrderStatus {
     Cancelled,
 }
 
-impl JsonSchemaProvider for Order {
+impl StructuredProvider for Order {
     fn schema() -> JsonSchema {
         JsonSchema {
             name: "Order".to_string(),
@@ -131,9 +148,9 @@ fn main() {
     }
     println!("Schema: {}", serde_json::to_string_pretty(&person_schema.schema).unwrap());
     
-    // Example 2: Schema from macro
-    println!("\n\n2. Product Schema (from macro):");
-    println!("--------------------------------");
+    // Example 2: Product schema
+    println!("\n\n2. Product Schema:");
+    println!("------------------");
     let product_schema = Product::schema();
     println!("Name: {}", product_schema.name);
     println!("Schema: {}", serde_json::to_string_pretty(&product_schema.schema).unwrap());

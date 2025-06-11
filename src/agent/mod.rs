@@ -14,4 +14,4 @@ pub use tools::{
     CalculatorTool, WebFetchTool, KeyValueStoreTool, FunctionTool,
     FileSystemTool, HttpTool, DatabaseTool, CodeExecutorTool
 };
-pub use structured::{StructuredOutput, TypedAgent, TypedAgentBuilder, JsonSchemaProvider};
+pub use structured::{StructuredOutput, TypedAgent, TypedAgentBuilder, StructuredProvider};

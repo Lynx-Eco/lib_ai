@@ -3,9 +3,17 @@ pub mod openai;
 pub mod gemini;
 pub mod xai;
 pub mod openrouter;
+pub mod ollama;
+pub mod cohere;
+pub mod replicate;
+pub mod together;
 
 pub use anthropic::AnthropicProvider;
 pub use openai::OpenAIProvider;
 pub use gemini::GeminiProvider;
 pub use xai::XAIProvider;
 pub use openrouter::OpenRouterProvider;
+pub use ollama::OllamaProvider;
+pub use cohere::CohereProvider;
+pub use replicate::ReplicateProvider;
+pub use together::TogetherProvider;

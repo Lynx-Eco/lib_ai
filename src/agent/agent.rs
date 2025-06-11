@@ -1,9 +1,11 @@
 use std::sync::Arc;
+use std::time::Instant;
 use thiserror::Error;
 
 use crate::{
     CompletionProvider, CompletionRequest, CompletionResponse, 
     ToolCall, ToolChoice, ResponseFormat,
+    observability::{MetricsCollector, AgentTracer, CostTracker, TelemetryExporter},
 };
 use super::{Context, Memory, ToolRegistry, ToolResult};
 
@@ -62,6 +64,11 @@ pub struct Agent {
     memory: Option<Box<dyn Memory>>,
     tools: Option<ToolRegistry>,
     config: AgentConfig,
+    agent_id: String,
+    metrics_collector: Option<Arc<MetricsCollector>>,
+    tracer: Option<Arc<AgentTracer>>,
+    cost_tracker: Option<Arc<std::sync::RwLock<CostTracker>>>,
+    telemetry_exporter: Option<Arc<TelemetryExporter>>,
 }
 
 impl Agent {
@@ -73,6 +80,7 @@ impl Agent {
         tools: Option<ToolRegistry>,
         config: AgentConfig,
     ) -> Self {
+        let agent_id = uuid::Uuid::new_v4().to_string();
         Self {
             provider,
             prompt,
@@ -80,11 +88,45 @@ impl Agent {
             memory,
             tools,
             config,
+            agent_id,
+            metrics_collector: None,
+            tracer: None,
+            cost_tracker: None,
+            telemetry_exporter: None,
         }
+    }
+
+    /// Set observability components
+    pub fn with_observability(
+        mut self,
+        metrics_collector: Option<Arc<MetricsCollector>>,
+        tracer: Option<Arc<AgentTracer>>,
+        cost_tracker: Option<Arc<std::sync::RwLock<CostTracker>>>,
+        telemetry_exporter: Option<Arc<TelemetryExporter>>,
+    ) -> Self {
+        self.metrics_collector = metrics_collector;
+        self.tracer = tracer;
+        self.cost_tracker = cost_tracker;
+        self.telemetry_exporter = telemetry_exporter;
+        self
+    }
+
+    /// Get the agent ID
+    pub fn agent_id(&self) -> &str {
+        &self.agent_id
     }
 
     /// Execute a task with the given input
     pub async fn execute(&mut self, input: &str) -> Result<String> {
+        let start_time = Instant::now();
+        let mut total_tokens = crate::observability::metrics::TokenUsage::new();
+        let mut total_cost = 0.0;
+        
+        // Start trace span if tracer is available
+        let _trace_span = self.tracer.as_ref().and_then(|tracer| {
+            tracer.start_trace(format!("agent_execute_{}", self.agent_id))
+        });
+        
         // Add user input to context
         self.context.add_user_message(input);
         
@@ -98,31 +140,83 @@ impl Agent {
         
         // Main execution loop
         let mut iterations = 0;
-        let final_response;
+        let mut final_response = String::new();
         
-        loop {
+        let execution_result = loop {
             if iterations >= self.config.max_iterations {
-                return Err(AgentError::ConfigError(
+                break Err(AgentError::ConfigError(
                     format!("Maximum iterations ({}) reached", self.config.max_iterations)
                 ));
             }
             
             // Build the completion request
             let request = self.build_request()?;
+            let model = request.model.clone();
             
             // Get completion from provider
             let response = self.provider.complete(request).await?;
+            
+            // Track tokens and costs
+            if let Some(usage) = &response.usage {
+                total_tokens.input_tokens += usage.prompt_tokens as u64;
+                total_tokens.output_tokens += usage.completion_tokens as u64;
+                
+                // Calculate cost if cost tracker is available
+                if let Some(cost_tracker) = &self.cost_tracker {
+                    if let Ok(mut tracker) = cost_tracker.write() {
+                        let pricing = tracker.get_pricing(self.provider.name(), &model);
+                        let request_cost = pricing.calculate_cost(
+                            usage.prompt_tokens as u64,
+                            usage.completion_tokens as u64,
+                            0, // cache_read_tokens
+                            0, // cache_write_tokens
+                        );
+                        total_cost += request_cost;
+                        
+                        tracker.record_usage(
+                            self.provider.name(),
+                            &model,
+                            usage.prompt_tokens as u64,
+                            usage.completion_tokens as u64,
+                            0,
+                            0,
+                            &pricing,
+                        );
+                    }
+                }
+            }
             
             // Process the response
             let (should_continue, response_text) = self.process_response(response).await?;
             
             if !should_continue {
                 final_response = response_text;
-                break;
+                break Ok(());
             }
             
             iterations += 1;
+        };
+        
+        let duration = start_time.elapsed();
+        let success = execution_result.is_ok();
+        
+        // Record metrics if metrics collector is available
+        if let Some(metrics) = &self.metrics_collector {
+            let model = self.config.model.clone()
+                .unwrap_or_else(|| self.provider.default_model().to_string());
+            metrics.record_request(
+                &self.agent_id,
+                success,
+                duration,
+                total_tokens,
+                total_cost,
+                self.provider.name(),
+                &model,
+            );
         }
+        
+        // Handle execution result
+        execution_result?;
         
         // Store interaction in memory if available
         if let Some(memory) = &mut self.memory {
@@ -225,9 +319,9 @@ impl Agent {
 
     async fn process_response(&mut self, response: CompletionResponse) -> Result<(bool, String)> {
         if response.choices.is_empty() {
-            return Err(AgentError::ProviderError(crate::AiError::InvalidRequest(
-                "No choices in response".to_string()
-            )));
+            return Err(AgentError::ProviderError(crate::AiError::InvalidRequest { message: 
+                "No choices in response".to_string(), field: None, code: None }
+            ))
         }
         
         let choice = &response.choices[0];
@@ -257,16 +351,33 @@ impl Agent {
     }
 
     async fn execute_tool(&self, tool_call: &ToolCall) -> Result<String> {
+        let start_time = Instant::now();
+        let tool_name = &tool_call.function.name;
+        
+        // Start tool trace span if tracer is available
+        let _trace_span = self.tracer.as_ref().and_then(|tracer| {
+            tracer.start_trace(format!("tool_execute_{}", tool_name))
+        });
+        
         let tools = self.tools.as_ref()
             .ok_or_else(|| AgentError::ToolError("No tools available".to_string()))?;
         
-        let executor = tools.get_executor(&tool_call.function.name)
+        let executor = tools.get_executor(tool_name)
             .ok_or_else(|| AgentError::ToolError(
-                format!("Tool '{}' not found", tool_call.function.name)
+                format!("Tool '{}' not found", tool_name)
             ))?;
         
         let result = executor.execute(&tool_call.function.arguments).await
             .map_err(|e| AgentError::ToolError(e.to_string()))?;
+        
+        let duration = start_time.elapsed();
+        let success = matches!(result, ToolResult::Success(_));
+        
+        // Record tool metrics if metrics collector is available
+        if let Some(metrics) = &self.metrics_collector {
+            let error_type = if success { None } else { Some("tool_execution_error".to_string()) };
+            metrics.record_tool_execution(&self.agent_id, tool_name, success, duration, error_type);
+        }
         
         match result {
             ToolResult::Success(value) => Ok(serde_json::to_string(&value).unwrap_or_else(|_| value.to_string())),

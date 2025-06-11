@@ -1,3 +1,6 @@
+[workspace]
+members = [".", "lib_ai_derive"]
+
 [package]
 name = "lib_ai"
 version = "0.1.0"
@@ -59,6 +62,26 @@ path = "examples/structured_demo.rs"
 name = "advanced_tools"
 path = "examples/advanced_tools.rs"
 
+[[example]]
+name = "derive_examples"
+path = "examples/derive_examples.rs"
+
+[[example]]
+name = "derive_tool_example"
+path = "examples/derive_tool_example.rs"
+
+[[example]]
+name = "observability_demo"
+path = "examples/observability_demo.rs"
+
+[[example]]
+name = "observability_simple"
+path = "examples/observability_simple.rs"
+
+[[example]]
+name = "error_handling_demo"
+path = "examples/error_handling_demo.rs"
+
 [dependencies]
 tokio = { version = "1.40", features = ["full"] }
 reqwest = { version = "0.12", features = ["json", "stream"] }
@@ -77,12 +100,18 @@ surrealdb = { version = "2.3.2", features = ["protocol-ws", "kv-mem"] }
 sqlx = { version = "0.8", features = ["runtime-tokio-native-tls", "any", "postgres", "mysql", "sqlite"] }
 url = "2.5"
 tempfile = "3.8"
+lib_ai_derive = { path = "./lib_ai_derive", optional = true }
+
+[features]
+default = []
+derive = ["lib_ai_derive"]
 
 [dev-dependencies]
 tokio-test = "0.4"
 mockito = "1.0"
 wiremock = "0.6"
 serial_test = "3.0"
+lib_ai_derive = { path = "./lib_ai_derive" }
 
 [[test]]
 name = "surrealdb_memory_tests"

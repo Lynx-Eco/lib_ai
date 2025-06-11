@@ -1988,6 +1988,7 @@ dependencies = [
  "chrono",
  "dotenv",
  "futures",
+ "lib_ai_derive",
  "mockito",
  "rand 0.8.5",
  "reqwest",
@@ -2004,6 +2005,17 @@ dependencies = [
  "url",
  "uuid",
  "wiremock",
+]
+
+[[package]]
+name = "lib_ai_derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "serde",
+ "serde_json",
+ "syn 2.0.101",
 ]
 
 [[package]]

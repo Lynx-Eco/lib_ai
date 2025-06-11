@@ -17,8 +17,10 @@
       "Bash(/opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg \"ToolResult::Success.*value\" -A 5 -B 5)",
       "Bash(/opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg \"execute_tool.*Ok\\(\" -A 10 -B 5)",
       "Bash(/opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg \"struct TestTool\" -A 10)",
-      "Bash(/opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg \"assert_eq.*val.*8\" -B 5 -A 5)"
+      "Bash(/opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg \"assert_eq.*val.*8\" -B 5 -A 5)",
+      "Bash(echo:*)"
     ],
     "deny": []
-  }
+  },
+  "enableAllProjectMcpServers": false
 }

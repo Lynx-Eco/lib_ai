@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use crate::CompletionProvider;
+use crate::{
+    CompletionProvider,
+    observability::{MetricsCollector, AgentTracer, CostTracker, TelemetryExporter},
+};
 use super::{ Agent, Context, Memory, ToolRegistry, ToolExecutor };
 use super::agent::AgentConfig;
 
@@ -12,6 +15,10 @@ pub struct AgentBuilder {
     memory: Option<Box<dyn Memory>>,
     tools: Option<ToolRegistry>,
     config: AgentConfig,
+    metrics_collector: Option<Arc<MetricsCollector>>,
+    tracer: Option<Arc<AgentTracer>>,
+    cost_tracker: Option<Arc<std::sync::RwLock<CostTracker>>>,
+    telemetry_exporter: Option<Arc<TelemetryExporter>>,
 }
 
 impl AgentBuilder {
@@ -24,6 +31,10 @@ impl AgentBuilder {
             memory: None,
             tools: None,
             config: AgentConfig::default(),
+            metrics_collector: None,
+            tracer: None,
+            cost_tracker: None,
+            telemetry_exporter: None,
         }
     }
 
@@ -158,13 +169,60 @@ impl AgentBuilder {
         self
     }
 
+    /// Set metrics collector for observability
+    pub fn metrics_collector(mut self, metrics_collector: Arc<MetricsCollector>) -> Self {
+        self.metrics_collector = Some(metrics_collector);
+        self
+    }
+
+    /// Set tracer for distributed tracing
+    pub fn tracer(mut self, tracer: Arc<AgentTracer>) -> Self {
+        self.tracer = Some(tracer);
+        self
+    }
+
+    /// Set cost tracker for cost monitoring
+    pub fn cost_tracker(mut self, cost_tracker: Arc<std::sync::RwLock<CostTracker>>) -> Self {
+        self.cost_tracker = Some(cost_tracker);
+        self
+    }
+
+    /// Set telemetry exporter for data export
+    pub fn telemetry_exporter(mut self, telemetry_exporter: Arc<TelemetryExporter>) -> Self {
+        self.telemetry_exporter = Some(telemetry_exporter);
+        self
+    }
+
+    /// Enable full observability with all components
+    pub fn with_observability(
+        mut self,
+        metrics_collector: Arc<MetricsCollector>,
+        tracer: Arc<AgentTracer>,
+        cost_tracker: Arc<std::sync::RwLock<CostTracker>>,
+        telemetry_exporter: Arc<TelemetryExporter>,
+    ) -> Self {
+        self.metrics_collector = Some(metrics_collector);
+        self.tracer = Some(tracer);
+        self.cost_tracker = Some(cost_tracker);
+        self.telemetry_exporter = Some(telemetry_exporter);
+        self
+    }
+
     /// Build the agent
     pub fn build(self) -> Result<Agent, String> {
         let provider = self.provider.ok_or_else(|| "Provider is required".to_string())?;
 
         let prompt = self.prompt.unwrap_or_default();
 
-        Ok(Agent::new(provider, prompt, self.context, self.memory, self.tools, self.config))
+        let agent = Agent::new(provider, prompt, self.context, self.memory, self.tools, self.config)
+            .with_observability(
+                self.metrics_collector,
+                self.tracer,
+                self.cost_tracker,
+                self.telemetry_exporter,
+            );
+
+        Ok(agent)
     }
 }
 

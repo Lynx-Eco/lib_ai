@@ -6,7 +6,7 @@ use crate::JsonSchema;
 use super::{Agent, AgentError};
 
 /// Trait for types that can provide a JSON schema
-pub trait JsonSchemaProvider {
+pub trait StructuredProvider {
     /// Get the JSON schema for this type
     fn schema() -> JsonSchema;
 }
@@ -17,19 +17,19 @@ pub trait StructuredOutput {
     /// Execute a task and return a strongly-typed response
     async fn execute_typed<T>(&mut self, input: &str) -> Result<T, AgentError>
     where
-        T: DeserializeOwned + JsonSchemaProvider + Send;
+        T: DeserializeOwned + StructuredProvider + Send;
     
     /// Chat with the agent and get a typed response
     async fn chat_typed<T>(&mut self, message: &str) -> Result<T, AgentError>
     where
-        T: DeserializeOwned + JsonSchemaProvider + Send;
+        T: DeserializeOwned + StructuredProvider + Send;
 }
 
 #[async_trait]
 impl StructuredOutput for Agent {
     async fn execute_typed<T>(&mut self, input: &str) -> Result<T, AgentError>
     where
-        T: DeserializeOwned + JsonSchemaProvider + Send,
+        T: DeserializeOwned + StructuredProvider + Send,
     {
         // Store original config
         let original_config = self.get_config().clone();
@@ -64,7 +64,7 @@ impl StructuredOutput for Agent {
     
     async fn chat_typed<T>(&mut self, message: &str) -> Result<T, AgentError>
     where
-        T: DeserializeOwned + JsonSchemaProvider + Send,
+        T: DeserializeOwned + StructuredProvider + Send,
     {
         self.execute_typed(message).await
     }
@@ -78,7 +78,7 @@ pub struct TypedAgentBuilder<T> {
 
 impl<T> TypedAgentBuilder<T>
 where
-    T: DeserializeOwned + JsonSchemaProvider + Send,
+    T: DeserializeOwned + StructuredProvider + Send,
 {
     /// Create a new typed agent builder
     pub fn new() -> Self {
@@ -144,7 +144,7 @@ pub struct TypedAgent<T> {
 
 impl<T> TypedAgent<T>
 where
-    T: DeserializeOwned + JsonSchemaProvider + Send,
+    T: DeserializeOwned + StructuredProvider + Send,
 {
     /// Execute a task and get typed response
     pub async fn execute(&mut self, input: &str) -> Result<T, AgentError> {
@@ -171,7 +171,7 @@ where
 #[macro_export]
 macro_rules! impl_json_schema {
     ($type:ty) => {
-        impl $crate::agent::JsonSchemaProvider for $type {
+        impl $crate::agent::StructuredProvider for $type {
             fn schema() -> $crate::JsonSchema {
                 $crate::JsonSchema {
                     name: stringify!($type).to_string(),
@@ -199,7 +199,7 @@ mod tests {
         confidence: f32,
     }
     
-    impl JsonSchemaProvider for TestResponse {
+    impl StructuredProvider for TestResponse {
         fn schema() -> JsonSchema {
             JsonSchema {
                 name: "TestResponse".to_string(),
