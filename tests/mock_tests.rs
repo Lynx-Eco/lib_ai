@@ -28,8 +28,8 @@ async fn test_openai_error_response() {
     
     assert!(result.is_err());
     match result {
-        Err(AiError::ProviderError(msg)) => {
-            assert!(msg.contains("OpenAI API error"));
+        Err(AiError::ProviderError { message, .. }) => {
+            assert!(message.contains("429"));
         }
         _ => panic!("Expected ProviderError"),
     }
@@ -216,7 +216,8 @@ async fn test_connection_error() {
     
     assert!(result.is_err());
     match result {
-        Err(AiError::RequestError(_)) => {
+        Err(AiError::NetworkError { .. }) | 
+        Err(AiError::ConnectionRefused { .. }) => {
             // Expected error type
         }
         Err(e) => panic!("Unexpected error type: {:?}", e),

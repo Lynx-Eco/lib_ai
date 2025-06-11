@@ -113,11 +113,27 @@ async fn test_error_handling() {
     
     // Test error variants
     let errors = vec![
-        AiError::InvalidApiKey,
-        AiError::RateLimitExceeded,
-        AiError::InvalidRequest("Missing required field".to_string()),
-        AiError::ProviderError("Service unavailable".to_string()),
-        AiError::StreamError("Connection lost".to_string()),
+        AiError::InvalidApiKey { provider: "test".to_string() },
+        AiError::RateLimitExceeded { 
+            retry_after: None,
+            daily_limit: None,
+            requests_remaining: None,
+        },
+        AiError::InvalidRequest { 
+            message: "Missing required field".to_string(),
+            field: None,
+            code: None,
+        },
+        AiError::ProviderError { 
+            provider: "test".to_string(),
+            message: "Service unavailable".to_string(),
+            error_code: None,
+            retryable: false,
+        },
+        AiError::StreamError { 
+            message: "Connection lost".to_string(),
+            retryable: false,
+        },
     ];
     
     for error in errors {
