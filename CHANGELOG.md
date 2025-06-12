@@ -1,5 +1,76 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+#### New Providers
+- **Cohere**: Support for Command models with native API
+- **Ollama**: Local model support for offline usage
+- **Replicate**: Cloud model deployment platform
+- **Together AI**: Open source model hosting
+
+#### Observability Features
+- **MetricsCollector**: Comprehensive metrics tracking
+  - Request counts, success rates, response times
+  - Token usage and cost tracking per provider/model
+  - Tool execution metrics
+  - Global and per-agent metrics
+- **CostTracker**: Detailed cost analysis
+  - Per-provider and per-model cost breakdown
+  - Token usage tracking with pricing calculations
+  - Cost report generation
+- **AgentTracer**: Distributed tracing support
+  - Trace events with timing information
+  - Parent-child span relationships
+  - Configurable sampling and retention
+- **TelemetryExporter**: Unified telemetry export
+  - Multiple export formats (Console, File, HTTP, Jaeger, Prometheus, OpenTelemetry)
+  - Configurable batch export
+  - Background export with intervals
+
+#### Error Handling Enhancements
+- **Comprehensive Error Types**: Rich error taxonomy
+  - Network, timeout, and connection errors
+  - Authentication and authorization errors
+  - Rate limiting and quota errors
+  - Provider-specific errors with metadata
+- **Retry System**: Configurable retry logic
+  - Multiple backoff strategies (Fixed, Linear, Exponential, Custom)
+  - Jitter strategies to prevent thundering herd
+  - Respect for retry-after headers
+  - Maximum time limits
+- **Circuit Breaker**: Fault tolerance
+  - Configurable failure thresholds
+  - Half-open state for recovery testing
+  - Per-service circuit breakers
+  - Registry for managing multiple breakers
+- **ResilientProvider**: Combined retry and circuit breaker
+  - Transparent resilience wrapper
+  - Builder pattern for configuration
+
+#### Derive Macros
+- **StructuredOutput**: Derive macro for structured agent responses
+- Automatic JSON schema generation
+- Type-safe structured completions
+
+#### Agent System Enhancements
+- **Full observability integration**: Metrics, tracing, and cost tracking
+- **with_observability()**: Single method to enable all observability
+- **Structured agent support**: Type-safe responses with derive macros
+- **Enhanced error handling**: Automatic retry and circuit breaking
+
+### Changed
+- **Error types**: Migrated from simple enums to structured variants with detailed fields
+- **Provider error handling**: Improved error messages and retry logic
+- **Test structure**: Separated mock tests from integration tests
+
+### Fixed
+- **Ollama provider**: Fixed lifetime issues with default_model
+- **Together provider**: Fixed request/response type mismatches
+- **Compilation errors**: Fixed error variant constructors in tests
+- **Observability demo**: Fixed type mismatches and import errors
+
 ## [0.1.0] - Initial Release
 
 ### Features
