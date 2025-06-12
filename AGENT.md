@@ -303,6 +303,176 @@ let powerful_agent = AgentBuilder::new()
 - **Input Validation**: Sanitize user inputs before processing
 - **Rate Limiting**: Implement per-user rate limits
 
+## Observability
+
+The agent system includes comprehensive observability features for monitoring, debugging, and cost tracking:
+
+### Metrics Collection
+
+```rust
+use lib_ai::observability::MetricsCollector;
+
+let metrics = Arc::new(MetricsCollector::new());
+
+let agent = AgentBuilder::new()
+    .provider(provider)
+    .with_metrics(metrics.clone())
+    .build()?;
+
+// Execute operations
+agent.execute("Analyze this data").await?;
+
+// Access metrics
+let agent_metrics = metrics.get_agent_metrics(agent.agent_id());
+println!("Total requests: {}", agent_metrics.total_requests);
+println!("Success rate: {:.2}%", 
+    (agent_metrics.successful_requests as f64 / agent_metrics.total_requests as f64) * 100.0
+);
+println!("Average response time: {:?}", agent_metrics.average_response_time);
+
+// Tool-specific metrics
+for (tool_name, tool_metrics) in &agent_metrics.tool_usage {
+    println!("{}: {} calls, {:?} avg duration", 
+        tool_name, 
+        tool_metrics.executions,
+        tool_metrics.average_duration
+    );
+}
+```
+
+### Cost Tracking
+
+Track API costs across providers:
+
+```rust
+use lib_ai::observability::CostTracker;
+
+let cost_tracker = Arc::new(std::sync::RwLock::new(CostTracker::new()));
+
+let agent = AgentBuilder::new()
+    .provider(provider)
+    .with_cost_tracker(cost_tracker.clone())
+    .build()?;
+
+// Later, generate cost reports
+let report = cost_tracker.read().unwrap().generate_report();
+println!("Total cost: ${:.6}", report.total_cost);
+
+for provider in &report.providers {
+    println!("{}: ${:.6}", provider.provider_name, provider.total_cost);
+    for model in &provider.models {
+        println!("  {}: ${:.6} ({} requests)", 
+            model.model_name, 
+            model.total_cost,
+            model.request_count
+        );
+    }
+}
+```
+
+### Tracing
+
+Detailed execution tracing for debugging:
+
+```rust
+use lib_ai::observability::{AgentTracer, TracingConfig};
+
+let tracer = Arc::new(AgentTracer::new(TracingConfig {
+    enabled: true,
+    sample_rate: 1.0, // Trace all requests
+    max_traces: 1000,
+    max_spans_per_trace: 100,
+    export_interval: Duration::from_secs(30),
+}));
+
+let agent = AgentBuilder::new()
+    .provider(provider)
+    .with_tracer(tracer.clone())
+    .build()?;
+
+// Access traces
+let traces = tracer.get_all_traces();
+for (trace_id, events) in traces {
+    println!("Trace {}: {} events", trace_id, events.len());
+    for event in events {
+        println!("  {}: {:?}", event.operation_name, event.duration);
+    }
+}
+```
+
+### Full Observability
+
+Enable all observability features at once:
+
+```rust
+use lib_ai::observability::{
+    MetricsCollector, AgentTracer, CostTracker, 
+    TelemetryExporter, TelemetryConfig, ExporterConfig
+};
+
+// Set up observability components
+let metrics = Arc::new(MetricsCollector::new());
+let tracer = Arc::new(AgentTracer::new(tracing_config));
+let cost_tracker = Arc::new(std::sync::RwLock::new(CostTracker::new()));
+
+// Configure telemetry export
+let telemetry_config = TelemetryConfig {
+    enabled: true,
+    export_interval: Duration::from_secs(60),
+    exporters: vec![
+        ExporterConfig {
+            name: "console".to_string(),
+            enabled: true,
+            exporter_type: ExporterType::Console,
+            endpoint: None,
+            headers: HashMap::new(),
+        },
+        ExporterConfig {
+            name: "prometheus".to_string(),
+            enabled: true,
+            exporter_type: ExporterType::Prometheus { 
+                endpoint: "http://localhost:9090".to_string() 
+            },
+            endpoint: Some("http://localhost:9090".to_string()),
+            headers: HashMap::new(),
+        },
+    ],
+    batch_size: 100,
+    max_queue_size: 1000,
+};
+
+let telemetry = Arc::new(TelemetryExporter::new(
+    telemetry_config,
+    metrics.clone(),
+    tracer.clone(),
+    Arc::new(tokio::sync::RwLock::new(cost_tracker.read().unwrap().clone())),
+));
+
+// Create agent with full observability
+let agent = AgentBuilder::new()
+    .provider(provider)
+    .with_observability(
+        metrics.clone(),
+        tracer.clone(),
+        cost_tracker.clone(),
+        telemetry.clone(),
+    )
+    .build()?;
+```
+
+### Custom Metrics
+
+Implement custom metrics collection:
+
+```rust
+use lib_ai::observability::MetricsCollector;
+
+// Track custom metrics
+metrics.record_custom_metric("cache_hit_rate", 0.85);
+metrics.increment_counter("api_calls", 1);
+metrics.record_histogram("response_size_bytes", 1024);
+```
+
 ## Extending the System
 
 The agent system is designed to be extensible:
@@ -311,6 +481,8 @@ The agent system is designed to be extensible:
 2. **Custom Tools**: Implement the `ToolExecutor` trait
 3. **Context Processors**: Pre/post-process messages
 4. **Custom Builders**: Extend `AgentBuilder` for domain-specific agents
+5. **Custom Metrics**: Add domain-specific observability
+6. **Custom Exporters**: Implement the `Exporter` trait for telemetry
 
 ## Troubleshooting
 
