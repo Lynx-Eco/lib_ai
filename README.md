@@ -9,6 +9,10 @@ A generalized Rust client library for multiple AI providers with a powerful agen
 - **Google Gemini**
 - **xAI** (Grok models)
 - **OpenRouter** (Multiple providers)
+- **Cohere** (Command models)
+- **Ollama** (Local models)
+- **Replicate** (Cloud models)
+- **Together AI** (Open source models)
 
 ## Basic Usage
 
@@ -66,10 +70,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 - **Agent system** with tool use, memory, and context management
 - **Streaming support** for real-time responses
 - **Tool/Function calling** for extending AI capabilities
-- **Structured output** with JSON mode
+- **Structured output** with JSON mode and derive macros
 - **Multimodal support** for text and images
 - **Async/await** based
 - **Type-safe** request/response models
+- **Comprehensive error handling** with retry logic and circuit breakers
+- **Observability** with metrics, tracing, and cost tracking
+- **Memory systems** including semantic search and persistent storage
 
 ## Advanced Features
 
@@ -192,6 +199,11 @@ Set the appropriate API key for your provider:
 - `GEMINI_API_KEY`
 - `XAI_API_KEY`
 - `OPENROUTER_API_KEY`
+- `COHERE_API_KEY`
+- `REPLICATE_API_TOKEN`
+- `TOGETHER_API_KEY`
+
+For Ollama, no API key is needed as it runs locally.
 
 ## Testing
 
@@ -231,3 +243,120 @@ OPENAI_API_KEY=your-key cargo test openai_tests
 6. **Conversation**: Multi-turn dialogues
 7. **Error handling**: Rate limits, invalid requests
 8. **Model switching**: Different models per provider
+
+## Observability
+
+The library includes comprehensive observability features:
+
+### Metrics Collection
+
+```rust
+use lib_ai::observability::MetricsCollector;
+
+let metrics = Arc::new(MetricsCollector::new());
+let agent = AgentBuilder::new()
+    .provider(provider)
+    .with_metrics(metrics.clone())
+    .build()?;
+
+// Access metrics
+let agent_metrics = metrics.get_agent_metrics(agent.agent_id());
+println!("Total requests: {}", agent_metrics.total_requests);
+println!("Average response time: {:?}", agent_metrics.average_response_time);
+```
+
+### Cost Tracking
+
+```rust
+use lib_ai::observability::CostTracker;
+
+let cost_tracker = Arc::new(std::sync::RwLock::new(CostTracker::new()));
+let report = cost_tracker.read().unwrap().generate_report();
+println!("Total cost: ${:.2}", report.total_cost);
+```
+
+### Tracing
+
+```rust
+use lib_ai::observability::{AgentTracer, TracingConfig};
+
+let tracer = Arc::new(AgentTracer::new(TracingConfig {
+    enabled: true,
+    sample_rate: 1.0,
+    max_traces: 1000,
+    max_spans_per_trace: 100,
+    export_interval: Duration::from_secs(30),
+}));
+```
+
+## Error Handling
+
+The library provides comprehensive error handling with retry logic and circuit breakers:
+
+### Retry Logic
+
+```rust
+use lib_ai::error::{RetryConfig, RetryExecutor};
+
+let retry_config = RetryConfig {
+    max_attempts: 3,
+    initial_delay: Duration::from_secs(1),
+    max_delay: Duration::from_secs(60),
+    backoff: BackoffStrategy::Exponential { multiplier: 2.0 },
+    jitter: JitterStrategy::Full,
+    respect_retry_after: true,
+    max_total_time: Some(Duration::from_secs(300)),
+    retry_condition: RetryCondition::Default,
+};
+
+let executor = RetryExecutor::new(retry_config);
+let result = executor.execute(|| async {
+    provider.complete(request).await
+}).await?;
+```
+
+### Circuit Breaker
+
+```rust
+use lib_ai::error::{CircuitBreaker, CircuitBreakerConfig};
+
+let circuit_breaker = CircuitBreaker::new("openai", CircuitBreakerConfig {
+    failure_threshold: 50.0,
+    minimum_request_count: 10,
+    measurement_window: Duration::from_secs(60),
+    recovery_timeout: Duration::from_secs(30),
+    half_open_max_requests: 3,
+    success_threshold: 60.0,
+});
+
+let result = circuit_breaker.execute(|| async {
+    provider.complete(request).await
+}).await?;
+```
+
+## Derive Macros
+
+Enable the `derive` feature to use derive macros for structured output:
+
+```toml
+[dependencies]
+lib_ai = { version = "0.1.0", features = ["derive"] }
+```
+
+```rust
+use lib_ai_derive::StructuredOutput;
+
+#[derive(Debug, Serialize, Deserialize, StructuredOutput)]
+struct WeatherInfo {
+    temperature: f32,
+    humidity: u8,
+    conditions: String,
+}
+
+let agent = AgentBuilder::new()
+    .provider(provider)
+    .structured::<WeatherInfo>()
+    .build()?;
+
+let weather: WeatherInfo = agent.complete_structured("What's the weather?").await?;
+```
