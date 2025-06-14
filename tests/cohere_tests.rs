@@ -1,6 +1,5 @@
 use dotenv::dotenv;
 use lib_ai::{providers::CohereProvider, AiError, CompletionProvider};
-use std::env;
 
 mod common;
 

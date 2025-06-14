@@ -220,7 +220,7 @@ mod tests {
 
     #[test]
     fn test_typed_agent_builder() {
-        let builder = TypedAgentBuilder::<TestResponse>::new()
+        let _builder = TypedAgentBuilder::<TestResponse>::new()
             .prompt("You are a helpful assistant")
             .temperature(0.7);
 

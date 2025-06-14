@@ -103,7 +103,7 @@ async fn test_together_conversation() {
 
 #[tokio::test]
 async fn test_together_error_handling() {
-    let provider = TogetherProvider::new("invalid-key".to_string());
+    let provider = TogetherProvider::new(Some("invalid-key".to_string())).unwrap();
 
     let request = common::create_simple_request(provider.default_model().to_string());
     let result = provider.complete(request).await;

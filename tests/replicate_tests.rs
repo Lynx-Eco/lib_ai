@@ -33,8 +33,8 @@ async fn test_replicate_simple_completion() {
             // Check usage
             assert!(response.usage.is_some());
             let usage = response.usage.unwrap();
-            assert!(usage.input_tokens > 0);
-            assert!(usage.output_tokens > 0);
+            assert!(usage.prompt_tokens > 0);
+            assert!(usage.completion_tokens > 0);
         }
         Err(e) => {
             eprintln!("Test failed (may be due to model availability): {}", e);
@@ -91,7 +91,7 @@ async fn test_replicate_conversation() {
 
 #[tokio::test]
 async fn test_replicate_error_handling() {
-    let provider = ReplicateProvider::new("invalid-token".to_string());
+    let provider = ReplicateProvider::new(Some("invalid-token".to_string())).unwrap();
 
     let request = common::create_simple_request("meta/llama-2-7b-chat".to_string());
     let result = provider.complete(request).await;
