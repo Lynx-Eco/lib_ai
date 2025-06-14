@@ -13,6 +13,7 @@ use crate::{
 pub struct OllamaProvider {
     client: Client,
     base_url: String,
+    #[allow(dead_code)]
     default_model: String,
 }
 
@@ -365,6 +366,7 @@ struct OllamaResponse {
 #[derive(Debug, Clone, Deserialize)]
 struct OllamaStreamResponse {
     model: String,
+    #[allow(dead_code)]
     created_at: Option<String>,
     message: OllamaMessage,
     done: bool,

@@ -329,10 +329,10 @@ mod tests {
         
         thread::sleep(Duration::from_millis(10));
         
+        let trace_id = parent_span.event.trace_id.clone();
+        
         child_span.finish();
         parent_span.finish();
-        
-        let trace_id = parent_span.event.trace_id;
         let traces = tracer.get_trace(&trace_id).unwrap();
         assert_eq!(traces.len(), 2);
         

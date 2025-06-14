@@ -343,6 +343,7 @@ struct ReplicatePrediction {
 #[derive(Debug, Clone, Deserialize)]
 struct PredictionUrls {
     get: String,
+    #[allow(dead_code)]
     cancel: String,
 }
 
