@@ -1,6 +1,6 @@
 use lib_ai::{
-    providers::*, CompletionProvider, CompletionRequest, Message, Role, MessageContent,
-    ResponseFormat, ResponseFormatType,
+    providers::*, CompletionProvider, CompletionRequest, Message, MessageContent, ResponseFormat,
+    ResponseFormatType, Role,
 };
 use tokio;
 
@@ -9,7 +9,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv::dotenv().ok();
     let api_key = std::env::var("OPENAI_API_KEY")?;
     let provider = OpenAIProvider::new(api_key);
-    
+
     // Request JSON output
     let request = CompletionRequest {
         model: provider.default_model().to_string(),
@@ -44,20 +44,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         stop: None,
         json_schema: None,
     };
-    
+
     let response = provider.complete(request).await?;
-    
+
     println!("Model: {}", response.model);
     for choice in response.choices {
         if let Some(text) = choice.message.content.as_text() {
             println!("JSON Response: {}", text);
-            
+
             // Parse the JSON to verify it's valid
             if let Ok(json) = serde_json::from_str::<serde_json::Value>(text) {
                 println!("Parsed JSON: {:#?}", json);
             }
         }
     }
-    
+
     Ok(())
 }

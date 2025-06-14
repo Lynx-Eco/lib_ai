@@ -1,10 +1,7 @@
+use lib_ai::agent::memory::{Memory, SemanticMemoryBuilder};
 use lib_ai::embeddings::{
-    EmbeddingProvider,
-    EmbeddingRequest,
-    MockEmbeddingProvider,
-    OpenAIEmbeddingProvider,
+    EmbeddingProvider, EmbeddingRequest, MockEmbeddingProvider, OpenAIEmbeddingProvider,
 };
-use lib_ai::agent::memory::{ Memory, SemanticMemoryBuilder };
 use std::env;
 
 #[tokio::main]
@@ -31,14 +28,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let texts = vec![
         "Machine learning is amazing",
         "Deep learning uses neural networks",
-        "The weather is sunny today"
+        "The weather is sunny today",
     ];
 
     let request = EmbeddingRequest {
-        input: texts
-            .iter()
-            .map(|s| s.to_string())
-            .collect(),
+        input: texts.iter().map(|s| s.to_string()).collect(),
         model: embedding_provider.default_model().to_string(),
     };
 
@@ -47,7 +41,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for (text, embedding) in texts.iter().zip(response.embeddings.iter()) {
         println!("Text: \"{}\"", text);
         println!("Embedding dimension: {}", embedding.vector.len());
-        println!("First 5 values: {:?}\n", &embedding.vector[..(5).min(embedding.vector.len())]);
+        println!(
+            "First 5 values: {:?}\n",
+            &embedding.vector[..(5).min(embedding.vector.len())]
+        );
     }
 
     // Demo 2: Cosine similarity
@@ -64,15 +61,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         println!(
             "Similarity between \"{}\" and \"{}\"): {:.3}",
-            texts[0],
-            texts[1],
-            ml_dl_similarity
+            texts[0], texts[1], ml_dl_similarity
         );
         println!(
             "Similarity between \"{}\" and \"{}\"): {:.3}",
-            texts[0],
-            texts[2],
-            ml_weather_similarity
+            texts[0], texts[2], ml_weather_similarity
         );
         println!("\nAs expected, ML and DL are more similar than ML and weather!");
     }
@@ -105,7 +98,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "What is machine learning?",
             "Machine learning is a subset of AI that enables computers to learn from data",
         ),
-        ("What's the weather like?", "I don't have access to current weather data")
+        (
+            "What's the weather like?",
+            "I don't have access to current weather data",
+        ),
     ];
 
     println!("Storing knowledge base...");
@@ -114,7 +110,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Query the memory
-    let queries = vec!["programming languages", "AI and ML", "web development", "weather forecast"];
+    let queries = vec![
+        "programming languages",
+        "AI and ML",
+        "web development",
+        "weather forecast",
+    ];
 
     println!("\nQuerying semantic memory:");
     for query in queries {

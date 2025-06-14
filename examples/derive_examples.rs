@@ -1,8 +1,11 @@
-use lib_ai::{ agent::{ StructuredProvider, TypedAgentBuilder }, providers::OpenAIProvider };
 #[cfg(feature = "derive")]
 use lib_ai::Structured;
+use lib_ai::{
+    agent::{StructuredProvider, TypedAgentBuilder},
+    providers::OpenAIProvider,
+};
 use lib_ai_derive::Structured;
-use serde::{ Deserialize, Serialize };
+use serde::{Deserialize, Serialize};
 use std::error::Error;
 
 // Example 1: Structured Output with Structured derive
@@ -87,32 +90,33 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Example 1: Using structured output with derived schema
     println!("=== Structured Output Example ===");
-    let mut weather_agent = TypedAgentBuilder::<WeatherResponse>
-        ::new()
+    let mut weather_agent = TypedAgentBuilder::<WeatherResponse>::new()
         .provider(OpenAIProvider::new(api_key.clone()))
         .prompt(
-            "You are a weather information assistant. Always respond with current weather data."
+            "You are a weather information assistant. Always respond with current weather data.",
         )
         .build()?;
 
-    let weather = weather_agent.execute("What's the weather like in London?").await?;
+    let weather = weather_agent
+        .execute("What's the weather like in London?")
+        .await?;
     println!("Weather: {:?}", weather);
 
     // Example 2: Task management with enum
     println!("\n=== Task Management Example ===");
-    let mut task_agent = TypedAgentBuilder::<TaskResponse>
-        ::new()
+    let mut task_agent = TypedAgentBuilder::<TaskResponse>::new()
         .provider(OpenAIProvider::new(api_key.clone()))
         .prompt("You are a task management assistant. Create tasks based on user requests.")
         .build()?;
 
-    let task = task_agent.execute("Create a task to review the quarterly report").await?;
+    let task = task_agent
+        .execute("Create a task to review the quarterly report")
+        .await?;
     println!("Task: {:?}", task);
 
     // Example 3: User profile extraction
     println!("\n=== User Profile Example ===");
-    let mut profile_agent = TypedAgentBuilder::<UserProfile>
-        ::new()
+    let mut profile_agent = TypedAgentBuilder::<UserProfile>::new()
         .provider(OpenAIProvider::new(api_key))
         .prompt("You are a profile extraction assistant. Extract user information from text.")
         .build()?;
@@ -126,16 +130,28 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Example 4: Print the generated schemas
     println!("\n=== Generated Schemas ===");
     println!("WeatherResponse schema:");
-    println!("{}", serde_json::to_string_pretty(&WeatherResponse::schema().schema)?);
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&WeatherResponse::schema().schema)?
+    );
 
     println!("\nTaskResponse schema:");
-    println!("{}", serde_json::to_string_pretty(&TaskResponse::schema().schema)?);
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&TaskResponse::schema().schema)?
+    );
 
     println!("\nTaskStatus schema:");
-    println!("{}", serde_json::to_string_pretty(&TaskStatus::schema().schema)?);
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&TaskStatus::schema().schema)?
+    );
 
     println!("\nUserProfile schema:");
-    println!("{}", serde_json::to_string_pretty(&UserProfile::schema().schema)?);
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&UserProfile::schema().schema)?
+    );
 
     Ok(())
 }

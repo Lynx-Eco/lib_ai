@@ -1,6 +1,6 @@
 use lib_ai::{
-    CompletionRequest, Message, Role, MessageContent, Tool, ToolType, ToolFunction,
-    ToolChoice, ResponseFormat, ResponseFormatType, ContentPart, ImageUrl,
+    CompletionRequest, ContentPart, ImageUrl, Message, MessageContent, ResponseFormat,
+    ResponseFormatType, Role, Tool, ToolChoice, ToolFunction, ToolType,
 };
 use serde_json::json;
 
@@ -67,14 +67,12 @@ pub fn create_tool_request(model: String) -> CompletionRequest {
 
     CompletionRequest {
         model,
-        messages: vec![
-            Message {
-                role: Role::User,
-                content: MessageContent::text("What's the weather like in San Francisco?"),
-                tool_calls: None,
-                tool_call_id: None,
-            },
-        ],
+        messages: vec![Message {
+            role: Role::User,
+            content: MessageContent::text("What's the weather like in San Francisco?"),
+            tool_calls: None,
+            tool_call_id: None,
+        }],
         temperature: Some(0.0),
         max_tokens: Some(150),
         stream: Some(false),
@@ -102,7 +100,7 @@ pub fn create_json_request(model: String) -> CompletionRequest {
             Message {
                 role: Role::User,
                 content: MessageContent::text(
-                    "Return a JSON object with a single field 'message' containing 'Hello, World!'"
+                    "Return a JSON object with a single field 'message' containing 'Hello, World!'",
                 ),
                 tool_calls: None,
                 tool_call_id: None,

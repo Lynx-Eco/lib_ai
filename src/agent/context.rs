@@ -1,4 +1,4 @@
-use crate::{Message, Role, MessageContent};
+use crate::{Message, MessageContent, Role};
 
 /// A message in the context with additional metadata
 #[derive(Clone, Debug)]
@@ -87,16 +87,16 @@ impl Context {
 
     /// Add a message with metadata
     pub fn add_message_with_metadata(
-        &mut self, 
-        message: Message, 
-        metadata: Option<serde_json::Value>
+        &mut self,
+        message: Message,
+        metadata: Option<serde_json::Value>,
     ) {
         let context_msg = ContextMessage {
             message,
             timestamp: std::time::SystemTime::now(),
             metadata,
         };
-        
+
         self.messages.push(context_msg);
         self.enforce_limits();
     }
@@ -123,7 +123,8 @@ impl Context {
 
     /// Clear all messages except system messages
     pub fn clear(&mut self) {
-        self.messages.retain(|cm| matches!(cm.message.role, Role::System));
+        self.messages
+            .retain(|cm| matches!(cm.message.role, Role::System));
     }
 
     /// Clear all messages
@@ -143,18 +144,22 @@ impl Context {
 
     /// Estimate token count (rough approximation)
     pub fn estimate_tokens(&self) -> usize {
-        self.messages.iter()
+        self.messages
+            .iter()
             .map(|cm| {
                 let content_len = match &cm.message.content {
                     MessageContent::Text(text) => text.len() / 4, // Rough estimate
                     MessageContent::Parts(parts) => {
-                        parts.iter().map(|p| match p {
-                            crate::ContentPart::Text { text } => text.len() / 4,
-                            crate::ContentPart::Image { .. } => 100, // Rough estimate for image
-                        }).sum()
+                        parts
+                            .iter()
+                            .map(|p| match p {
+                                crate::ContentPart::Text { text } => text.len() / 4,
+                                crate::ContentPart::Image { .. } => 100, // Rough estimate for image
+                            })
+                            .sum()
                     }
                 };
-                
+
                 // Add some overhead for role and structure
                 content_len + 10
             })
@@ -164,17 +169,19 @@ impl Context {
     /// Enforce message and token limits
     fn enforce_limits(&mut self) {
         // Keep system messages at the beginning
-        let system_count = self.messages.iter()
+        let system_count = self
+            .messages
+            .iter()
             .filter(|cm| matches!(cm.message.role, Role::System))
             .count();
-        
+
         // Enforce message limit
         if let Some(max) = self.max_messages {
             if self.messages.len() > max {
                 // Remove oldest non-system messages
                 let to_remove = self.messages.len() - max;
                 let mut removed = 0;
-                
+
                 self.messages.retain(|cm| {
                     if removed >= to_remove || matches!(cm.message.role, Role::System) {
                         true
@@ -185,14 +192,16 @@ impl Context {
                 });
             }
         }
-        
+
         // Enforce token limit (rough)
         if let Some(max_tokens) = self.max_tokens {
             while self.estimate_tokens() > max_tokens && self.messages.len() > system_count {
                 // Find first non-system message and remove it
-                if let Some(pos) = self.messages.iter().position(|cm| {
-                    !matches!(cm.message.role, Role::System)
-                }) {
+                if let Some(pos) = self
+                    .messages
+                    .iter()
+                    .position(|cm| !matches!(cm.message.role, Role::System))
+                {
                     self.messages.remove(pos);
                 } else {
                     break;
@@ -220,30 +229,30 @@ impl Default for Context {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_context_limits() {
         let mut ctx = Context::with_limits(Some(3), None);
-        
+
         ctx.add_system_message("System prompt");
         ctx.add_user_message("Message 1");
         ctx.add_assistant_message("Response 1");
         ctx.add_user_message("Message 2");
-        
+
         assert_eq!(ctx.len(), 3); // Should have removed oldest non-system message
         assert_eq!(ctx.messages().next().unwrap().role, Role::System);
     }
-    
+
     #[test]
     fn test_context_clear() {
         let mut ctx = Context::new();
-        
+
         ctx.add_system_message("System prompt");
         ctx.add_user_message("User message");
         ctx.add_assistant_message("Assistant response");
-        
+
         ctx.clear();
-        
+
         assert_eq!(ctx.len(), 1); // Only system message remains
         assert_eq!(ctx.messages().next().unwrap().role, Role::System);
     }

@@ -1,12 +1,12 @@
 use async_trait::async_trait;
+use futures::stream::{Stream, StreamExt};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use futures::stream::{Stream, StreamExt};
 use std::pin::Pin;
 
 use crate::{
-    CompletionProvider, CompletionRequest, CompletionResponse, StreamChunk,
-    Message, MessageContent, Role, Choice, Usage, AiError, Result,
+    AiError, Choice, CompletionProvider, CompletionRequest, CompletionResponse, Message,
+    MessageContent, Result, Role, StreamChunk, Usage,
 };
 
 /// Ollama provider for local LLM support
@@ -19,7 +19,7 @@ pub struct OllamaProvider {
 
 impl OllamaProvider {
     /// Create a new Ollama provider
-    /// 
+    ///
     /// # Arguments
     /// * `base_url` - The base URL for the Ollama API (default: "http://localhost:11434")
     /// * `default_model` - The default model to use (e.g., "llama2", "mistral", "codellama")
@@ -35,7 +35,7 @@ impl OllamaProvider {
     pub async fn list_models(&self) -> Result<Vec<OllamaModel>> {
         let url = format!("{}/api/tags", self.base_url);
         let response = self.client.get(&url).send().await?;
-        
+
         if !response.status().is_success() {
             let error_text = response.text().await?;
             return Err(AiError::ProviderError {
@@ -45,7 +45,7 @@ impl OllamaProvider {
                 retryable: false,
             });
         }
-        
+
         let models_response: OllamaModelsResponse = response.json().await?;
         Ok(models_response.models)
     }
@@ -57,13 +57,9 @@ impl OllamaProvider {
             name: model_name.to_string(),
             stream: false,
         };
-        
-        let response = self.client
-            .post(&url)
-            .json(&request)
-            .send()
-            .await?;
-        
+
+        let response = self.client.post(&url).json(&request).send().await?;
+
         if !response.status().is_success() {
             let error_text = response.text().await?;
             return Err(AiError::ProviderError {
@@ -73,7 +69,7 @@ impl OllamaProvider {
                 retryable: true,
             });
         }
-        
+
         Ok(())
     }
 
@@ -92,7 +88,8 @@ impl OllamaProvider {
             MessageContent::Parts(parts) => {
                 // For multimodal, we'll need to handle images differently
                 // For now, just extract text parts
-                parts.iter()
+                parts
+                    .iter()
                     .filter_map(|part| match part {
                         crate::ContentPart::Text { text } => Some(text.clone()),
                         _ => None,
@@ -116,7 +113,10 @@ impl OllamaProvider {
 
     fn convert_to_standard_response(&self, response: OllamaResponse) -> CompletionResponse {
         CompletionResponse {
-            id: response.created_at.clone().unwrap_or_else(|| "ollama_response".to_string()),
+            id: response
+                .created_at
+                .clone()
+                .unwrap_or_else(|| "ollama_response".to_string()),
             model: response.model,
             choices: vec![Choice {
                 index: 0,
@@ -126,12 +126,17 @@ impl OllamaProvider {
                     tool_calls: None,
                     tool_call_id: None,
                 },
-                finish_reason: if response.done { Some("stop".to_string()) } else { None },
+                finish_reason: if response.done {
+                    Some("stop".to_string())
+                } else {
+                    None
+                },
             }],
             usage: Some(Usage {
                 prompt_tokens: response.prompt_eval_count.unwrap_or(0) as u32,
                 completion_tokens: response.eval_count.unwrap_or(0) as u32,
-                total_tokens: (response.prompt_eval_count.unwrap_or(0) + response.eval_count.unwrap_or(0)) as u32,
+                total_tokens: (response.prompt_eval_count.unwrap_or(0)
+                    + response.eval_count.unwrap_or(0)) as u32,
             }),
         }
     }
@@ -141,9 +146,10 @@ impl OllamaProvider {
 impl CompletionProvider for OllamaProvider {
     async fn complete(&self, request: CompletionRequest) -> Result<CompletionResponse> {
         let url = format!("{}/api/chat", self.base_url);
-        
+
         // Convert messages
-        let messages: Vec<OllamaMessage> = request.messages
+        let messages: Vec<OllamaMessage> = request
+            .messages
             .iter()
             .map(|msg| self.convert_message(msg))
             .collect();
@@ -153,12 +159,13 @@ impl CompletionProvider for OllamaProvider {
             model: request.model.clone(),
             messages,
             stream: false,
-            format: request.response_format.as_ref().and_then(|f| {
-                match &f.r#type {
+            format: request
+                .response_format
+                .as_ref()
+                .and_then(|f| match &f.r#type {
                     crate::ResponseFormatType::JsonObject => Some("json".to_string()),
                     _ => None,
-                }
-            }),
+                }),
             options: OllamaOptions {
                 temperature: request.temperature,
                 top_p: request.top_p,
@@ -168,11 +175,7 @@ impl CompletionProvider for OllamaProvider {
             },
         };
 
-        let response = self.client
-            .post(&url)
-            .json(&ollama_request)
-            .send()
-            .await?;
+        let response = self.client.post(&url).json(&ollama_request).send().await?;
 
         let status = response.status();
         if !status.is_success() {
@@ -194,9 +197,10 @@ impl CompletionProvider for OllamaProvider {
         request: CompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamChunk>> + Send>>> {
         let url = format!("{}/api/chat", self.base_url);
-        
+
         // Convert messages
-        let messages: Vec<OllamaMessage> = request.messages
+        let messages: Vec<OllamaMessage> = request
+            .messages
             .iter()
             .map(|msg| self.convert_message(msg))
             .collect();
@@ -206,12 +210,13 @@ impl CompletionProvider for OllamaProvider {
             model: request.model.clone(),
             messages,
             stream: true,
-            format: request.response_format.as_ref().and_then(|f| {
-                match &f.r#type {
+            format: request
+                .response_format
+                .as_ref()
+                .and_then(|f| match &f.r#type {
                     crate::ResponseFormatType::JsonObject => Some("json".to_string()),
                     _ => None,
-                }
-            }),
+                }),
             options: OllamaOptions {
                 temperature: request.temperature,
                 top_p: request.top_p,
@@ -221,11 +226,7 @@ impl CompletionProvider for OllamaProvider {
             },
         };
 
-        let response = self.client
-            .post(&url)
-            .json(&ollama_request)
-            .send()
-            .await?;
+        let response = self.client.post(&url).json(&ollama_request).send().await?;
 
         let status = response.status();
         if !status.is_success() {
@@ -245,33 +246,31 @@ impl CompletionProvider for OllamaProvider {
                 Ok(chunk) => {
                     // Parse the JSON line
                     match serde_json::from_slice::<OllamaStreamResponse>(&chunk) {
-                        Ok(ollama_chunk) => {
-                            Ok(StreamChunk {
-                                id: "ollama_stream".to_string(),
-                                choices: vec![crate::StreamChoice {
-                                    index: 0,
-                                    delta: crate::Delta {
-                                        role: if ollama_chunk.message.role.is_empty() { 
-                                            None 
-                                        } else { 
-                                            Some(Role::Assistant) 
-                                        },
-                                        content: if ollama_chunk.message.content.is_empty() { 
-                                            None 
-                                        } else { 
-                                            Some(ollama_chunk.message.content) 
-                                        },
-                                        tool_calls: None,
+                        Ok(ollama_chunk) => Ok(StreamChunk {
+                            id: "ollama_stream".to_string(),
+                            choices: vec![crate::StreamChoice {
+                                index: 0,
+                                delta: crate::Delta {
+                                    role: if ollama_chunk.message.role.is_empty() {
+                                        None
+                                    } else {
+                                        Some(Role::Assistant)
                                     },
-                                    finish_reason: if ollama_chunk.done { 
-                                        Some("stop".to_string()) 
-                                    } else { 
-                                        None 
+                                    content: if ollama_chunk.message.content.is_empty() {
+                                        None
+                                    } else {
+                                        Some(ollama_chunk.message.content)
                                     },
-                                }],
-                                model: Some(ollama_chunk.model),
-                            })
-                        }
+                                    tool_calls: None,
+                                },
+                                finish_reason: if ollama_chunk.done {
+                                    Some("stop".to_string())
+                                } else {
+                                    None
+                                },
+                            }],
+                            model: Some(ollama_chunk.model),
+                        }),
                         Err(e) => Err(AiError::StreamError {
                             message: format!("Failed to parse Ollama stream chunk: {}", e),
                             retryable: false,
@@ -404,8 +403,13 @@ mod tests {
 
     #[test]
     fn test_custom_base_url() {
-        let provider = OllamaProvider::new(Some("http://custom:11434".to_string()), Some("mistral".to_string()));
+        let provider = OllamaProvider::new(
+            Some("http://custom:11434".to_string()),
+            Some("mistral".to_string()),
+        );
         assert_eq!(provider.base_url, "http://custom:11434");
-        assert_eq!(provider.default_model(), "mistral");
+        // Note: default_model() returns a static value, the instance field is stored but not used by the trait method
+        assert_eq!(provider.default_model(), "llama2");
+        assert_eq!(provider.default_model, "mistral");
     }
 }

@@ -3,15 +3,15 @@ use quote::quote;
 use syn::{parse_macro_input, Data, DeriveInput, Fields, Lit, Meta};
 
 /// Derive macro for StructuredProvider trait
-/// 
+///
 /// This macro automatically generates a JSON schema for a struct,
 /// making it usable with structured output in AI agents.
-/// 
+///
 /// # Example
 /// ```
 /// use lib_ai_derive::Structured;
 /// use serde::{Deserialize, Serialize};
-/// 
+///
 /// #[derive(Debug, Serialize, Deserialize, Structured)]
 /// struct WeatherResponse {
 ///     #[schema(description = "Current temperature in Celsius")]
@@ -28,11 +28,11 @@ use syn::{parse_macro_input, Data, DeriveInput, Fields, Lit, Meta};
 pub fn derive_structured(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = &input.ident;
-    
+
     let schema_json = generate_schema(&input);
-    
+
     let name_str = name.to_string();
-    
+
     let expanded = quote! {
         impl lib_ai::agent::StructuredProvider for #name {
             fn schema() -> lib_ai::JsonSchema {
@@ -45,20 +45,20 @@ pub fn derive_structured(input: TokenStream) -> TokenStream {
             }
         }
     };
-    
+
     TokenStream::from(expanded)
 }
 
 /// Derive macro for creating tool executors
-/// 
+///
 /// This macro generates a ToolExecutor implementation for a struct,
 /// allowing it to be used as a tool in AI agents.
-/// 
+///
 /// # Example
 /// ```
 /// use lib_ai_derive::AiTool;
 /// use serde::{Deserialize, Serialize};
-/// 
+///
 /// #[derive(Debug, Serialize, Deserialize, AiTool)]
 /// #[tool(name = "weather", description = "Get current weather information")]
 /// struct WeatherTool {
@@ -68,7 +68,7 @@ pub fn derive_structured(input: TokenStream) -> TokenStream {
 ///     #[tool(description = "Temperature unit", enum_values = "celsius,fahrenheit")]
 ///     unit: String,
 /// }
-/// 
+///
 /// impl WeatherTool {
 ///     // This method will be called when the tool is executed
 ///     async fn execute(self) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
@@ -86,10 +86,10 @@ pub fn derive_structured(input: TokenStream) -> TokenStream {
 pub fn derive_ai_tool(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = &input.ident;
-    
+
     let (tool_name, tool_description) = extract_tool_attributes(&input);
     let parameters_schema = generate_tool_parameters(&input);
-    
+
     let expanded = quote! {
         #[async_trait::async_trait]
         impl lib_ai::agent::ToolExecutor for #name {
@@ -100,7 +100,7 @@ pub fn derive_ai_tool(input: TokenStream) -> TokenStream {
                     Err(e) => Ok(lib_ai::agent::ToolResult::Error(e.to_string())),
                 }
             }
-            
+
             fn definition(&self) -> lib_ai::ToolFunction {
                 lib_ai::ToolFunction {
                     name: #tool_name.to_string(),
@@ -110,7 +110,7 @@ pub fn derive_ai_tool(input: TokenStream) -> TokenStream {
             }
         }
     };
-    
+
     TokenStream::from(expanded)
 }
 
@@ -119,7 +119,7 @@ fn generate_schema(input: &DeriveInput) -> proc_macro2::TokenStream {
         Data::Struct(data_struct) => {
             let properties = generate_struct_properties(&data_struct.fields);
             let required = generate_required_fields(&data_struct.fields);
-            
+
             quote! {
                 serde_json::json!({
                     "type": "object",
@@ -129,13 +129,15 @@ fn generate_schema(input: &DeriveInput) -> proc_macro2::TokenStream {
             }
         }
         Data::Enum(data_enum) => {
-            let variants: Vec<_> = data_enum.variants.iter()
+            let variants: Vec<_> = data_enum
+                .variants
+                .iter()
                 .map(|v| {
                     let name = v.ident.to_string();
                     quote! { #name }
                 })
                 .collect();
-            
+
             quote! {
                 serde_json::json!({
                     "type": "string",
@@ -150,12 +152,14 @@ fn generate_schema(input: &DeriveInput) -> proc_macro2::TokenStream {
 fn generate_struct_properties(fields: &Fields) -> proc_macro2::TokenStream {
     match fields {
         Fields::Named(fields) => {
-            let field_schemas: Vec<proc_macro2::TokenStream> = fields.named.iter()
+            let field_schemas: Vec<proc_macro2::TokenStream> = fields
+                .named
+                .iter()
                 .map(|f| {
                     let field_name = f.ident.as_ref().unwrap().to_string();
                     let field_type = &f.ty;
                     let description = extract_description(&f.attrs);
-                    
+
                     let type_str = match quote!(#field_type).to_string().as_str() {
                         "String" => "string",
                         "bool" => "boolean",
@@ -163,7 +167,7 @@ fn generate_struct_properties(fields: &Fields) -> proc_macro2::TokenStream {
                         "f32" | "f64" => "number",
                         _ => "object", // Default to object for complex types
                     };
-                    
+
                     if let Some(desc) = description {
                         quote! {
                             #field_name: {
@@ -180,7 +184,7 @@ fn generate_struct_properties(fields: &Fields) -> proc_macro2::TokenStream {
                     }
                 })
                 .collect();
-            
+
             quote! {
                 serde_json::json!({
                     #(#field_schemas),*
@@ -194,14 +198,16 @@ fn generate_struct_properties(fields: &Fields) -> proc_macro2::TokenStream {
 fn generate_required_fields(fields: &Fields) -> proc_macro2::TokenStream {
     match fields {
         Fields::Named(fields) => {
-            let required: Vec<_> = fields.named.iter()
+            let required: Vec<_> = fields
+                .named
+                .iter()
                 .filter(|f| !is_option_type(&f.ty))
                 .map(|f| {
                     let name = f.ident.as_ref().unwrap().to_string();
                     quote! { #name }
                 })
                 .collect();
-            
+
             quote! {
                 serde_json::json!([#(#required),*])
             }
@@ -215,7 +221,7 @@ fn generate_tool_parameters(input: &DeriveInput) -> proc_macro2::TokenStream {
         Data::Struct(data_struct) => {
             let properties = generate_tool_properties(&data_struct.fields);
             let required = generate_required_fields(&data_struct.fields);
-            
+
             quote! {
                 serde_json::json!({
                     "type": "object",
@@ -231,12 +237,14 @@ fn generate_tool_parameters(input: &DeriveInput) -> proc_macro2::TokenStream {
 fn generate_tool_properties(fields: &Fields) -> proc_macro2::TokenStream {
     match fields {
         Fields::Named(fields) => {
-            let field_schemas: Vec<proc_macro2::TokenStream> = fields.named.iter()
+            let field_schemas: Vec<proc_macro2::TokenStream> = fields
+                .named
+                .iter()
                 .map(|f| {
                     let field_name = f.ident.as_ref().unwrap().to_string();
                     let field_type = &f.ty;
                     let attrs = extract_tool_field_attributes(&f.attrs);
-                    
+
                     let type_str = match quote!(#field_type).to_string().as_str() {
                         "String" => "string",
                         "bool" => "boolean",
@@ -244,22 +252,19 @@ fn generate_tool_properties(fields: &Fields) -> proc_macro2::TokenStream {
                         "f32" | "f64" => "number",
                         _ => "object",
                     };
-                    
-                    let mut field_def = vec![
-                        quote! { "type": #type_str }
-                    ];
-                    
+
+                    let mut field_def = vec![quote! { "type": #type_str }];
+
                     if let Some(desc) = attrs.description {
                         field_def.push(quote! { "description": #desc });
                     }
-                    
+
                     if let Some(enum_values) = attrs.enum_values {
-                        let values: Vec<_> = enum_values.split(',')
-                            .map(|v| quote! { #v })
-                            .collect();
+                        let values: Vec<_> =
+                            enum_values.split(',').map(|v| quote! { #v }).collect();
                         field_def.push(quote! { "enum": [#(#values),*] });
                     }
-                    
+
                     quote! {
                         #field_name: {
                             #(#field_def),*
@@ -267,7 +272,7 @@ fn generate_tool_properties(fields: &Fields) -> proc_macro2::TokenStream {
                     }
                 })
                 .collect();
-            
+
             quote! {
                 serde_json::json!({
                     #(#field_schemas),*
@@ -288,18 +293,18 @@ fn extract_tool_field_attributes(attrs: &[syn::Attribute]) -> ToolFieldAttribute
         description: None,
         enum_values: None,
     };
-    
+
     for attr in attrs {
         if attr.path().is_ident("tool") {
             let meta_list = match &attr.meta {
                 Meta::List(list) => list,
                 _ => continue,
             };
-            
+
             let parsed = meta_list.parse_args_with(
-                syn::punctuated::Punctuated::<Meta, syn::Token![,]>::parse_terminated
+                syn::punctuated::Punctuated::<Meta, syn::Token![,]>::parse_terminated,
             );
-            
+
             if let Ok(nested) = parsed {
                 for meta in nested {
                     match meta {
@@ -323,7 +328,7 @@ fn extract_tool_field_attributes(attrs: &[syn::Attribute]) -> ToolFieldAttribute
             }
         }
     }
-    
+
     result
 }
 
@@ -349,18 +354,18 @@ fn extract_description(attrs: &[syn::Attribute]) -> Option<String> {
 fn extract_tool_attributes(input: &DeriveInput) -> (String, String) {
     let mut name = input.ident.to_string();
     let mut description = format!("{} tool", name);
-    
+
     for attr in &input.attrs {
         if attr.path().is_ident("tool") {
             let meta_list = match &attr.meta {
                 Meta::List(list) => list,
                 _ => continue,
             };
-            
+
             let parsed = meta_list.parse_args_with(
-                syn::punctuated::Punctuated::<Meta, syn::Token![,]>::parse_terminated
+                syn::punctuated::Punctuated::<Meta, syn::Token![,]>::parse_terminated,
             );
-            
+
             if let Ok(nested) = parsed {
                 for meta in nested {
                     match meta {
@@ -384,7 +389,7 @@ fn extract_tool_attributes(input: &DeriveInput) -> (String, String) {
             }
         }
     }
-    
+
     (name, description)
 }
 

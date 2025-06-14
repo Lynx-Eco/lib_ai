@@ -1,14 +1,17 @@
 // Base tools functionality
 mod base;
-pub use base::{ToolExecutor, ToolResult, ToolRegistry, CalculatorTool, WebFetchTool, KeyValueStoreTool, FunctionTool};
+pub use base::{
+    CalculatorTool, FunctionTool, KeyValueStoreTool, ToolExecutor, ToolRegistry, ToolResult,
+    WebFetchTool,
+};
 
 // Tool implementations
+mod code_executor;
+mod database;
 mod filesystem;
 mod http;
-mod database;
-mod code_executor;
 
+pub use code_executor::CodeExecutorTool;
+pub use database::DatabaseTool;
 pub use filesystem::FileSystemTool;
 pub use http::HttpTool;
-pub use database::DatabaseTool;
-pub use code_executor::CodeExecutorTool;

@@ -1,9 +1,9 @@
 use async_trait::async_trait;
+use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
-use serde_json::Value;
 
-use crate::{Tool, ToolType, ToolFunction};
+use crate::{Tool, ToolFunction, ToolType};
 
 /// Result of a tool execution
 #[derive(Debug, Clone)]
@@ -17,7 +17,7 @@ pub enum ToolResult {
 pub trait ToolExecutor: Send + Sync {
     /// Execute the tool with the given arguments
     async fn execute(&self, arguments: &str) -> Result<ToolResult, Box<dyn std::error::Error>>;
-    
+
     /// Get the tool definition
     fn definition(&self) -> ToolFunction;
 }
@@ -36,11 +36,7 @@ impl ToolRegistry {
     }
 
     /// Register a tool
-    pub fn register<S: Into<String>, E: ToolExecutor + 'static>(
-        &mut self,
-        name: S,
-        executor: E,
-    ) {
+    pub fn register<S: Into<String>, E: ToolExecutor + 'static>(&mut self, name: S, executor: E) {
         self.tools.insert(name.into(), Arc::new(executor));
     }
 
@@ -56,7 +52,7 @@ impl ToolRegistry {
             .map(|(name, executor)| {
                 let mut definition = executor.definition();
                 definition.name = name.clone(); // Ensure name matches registry key
-                
+
                 Tool {
                     r#type: ToolType::Function,
                     function: definition,
@@ -111,19 +107,13 @@ pub struct CalculatorTool;
 impl ToolExecutor for CalculatorTool {
     async fn execute(&self, arguments: &str) -> Result<ToolResult, Box<dyn std::error::Error>> {
         let args: Value = serde_json::from_str(arguments)?;
-        
-        let operation = args["operation"]
-            .as_str()
-            .ok_or("Missing operation")?;
-        
-        let a = args["a"]
-            .as_f64()
-            .ok_or("Missing or invalid 'a'")?;
-        
-        let b = args["b"]
-            .as_f64()
-            .ok_or("Missing or invalid 'b'")?;
-        
+
+        let operation = args["operation"].as_str().ok_or("Missing operation")?;
+
+        let a = args["a"].as_f64().ok_or("Missing or invalid 'a'")?;
+
+        let b = args["b"].as_f64().ok_or("Missing or invalid 'b'")?;
+
         let result = match operation {
             "add" => a + b,
             "subtract" => a - b,
@@ -134,9 +124,14 @@ impl ToolExecutor for CalculatorTool {
                 }
                 a / b
             }
-            _ => return Ok(ToolResult::Error(format!("Unknown operation: {}", operation))),
+            _ => {
+                return Ok(ToolResult::Error(format!(
+                    "Unknown operation: {}",
+                    operation
+                )))
+            }
         };
-        
+
         Ok(ToolResult::Success(serde_json::json!({
             "result": result,
             "operation": operation,
@@ -144,7 +139,7 @@ impl ToolExecutor for CalculatorTool {
             "b": b
         })))
     }
-    
+
     fn definition(&self) -> ToolFunction {
         ToolFunction {
             name: "calculator".to_string(),
@@ -189,11 +184,9 @@ impl WebFetchTool {
 impl ToolExecutor for WebFetchTool {
     async fn execute(&self, arguments: &str) -> Result<ToolResult, Box<dyn std::error::Error>> {
         let args: Value = serde_json::from_str(arguments)?;
-        
-        let url = args["url"]
-            .as_str()
-            .ok_or("Missing URL")?;
-        
+
+        let url = args["url"].as_str().ok_or("Missing URL")?;
+
         match self.client.get(url).send().await {
             Ok(response) => {
                 let status = response.status();
@@ -217,7 +210,7 @@ impl ToolExecutor for WebFetchTool {
             Err(e) => Ok(ToolResult::Error(format!("Request failed: {}", e))),
         }
     }
-    
+
     fn definition(&self) -> ToolFunction {
         ToolFunction {
             name: "web_fetch".to_string(),
@@ -253,32 +246,26 @@ impl KeyValueStoreTool {
 impl ToolExecutor for KeyValueStoreTool {
     async fn execute(&self, arguments: &str) -> Result<ToolResult, Box<dyn std::error::Error>> {
         let args: Value = serde_json::from_str(arguments)?;
-        
-        let action = args["action"]
-            .as_str()
-            .ok_or("Missing action")?;
-        
-        let key = args["key"]
-            .as_str()
-            .ok_or("Missing key")?;
-        
+
+        let action = args["action"].as_str().ok_or("Missing action")?;
+
+        let key = args["key"].as_str().ok_or("Missing key")?;
+
         let mut store = self.store.lock().await;
-        
+
         match action {
-            "get" => {
-                match store.get(key) {
-                    Some(value) => Ok(ToolResult::Success(serde_json::json!({
-                        "key": key,
-                        "value": value,
-                        "found": true
-                    }))),
-                    None => Ok(ToolResult::Success(serde_json::json!({
-                        "key": key,
-                        "value": null,
-                        "found": false
-                    }))),
-                }
-            }
+            "get" => match store.get(key) {
+                Some(value) => Ok(ToolResult::Success(serde_json::json!({
+                    "key": key,
+                    "value": value,
+                    "found": true
+                }))),
+                None => Ok(ToolResult::Success(serde_json::json!({
+                    "key": key,
+                    "value": null,
+                    "found": false
+                }))),
+            },
             "set" => {
                 let value = args["value"]
                     .as_str()
@@ -309,7 +296,7 @@ impl ToolExecutor for KeyValueStoreTool {
             _ => Ok(ToolResult::Error(format!("Unknown action: {}", action))),
         }
     }
-    
+
     fn definition(&self) -> ToolFunction {
         ToolFunction {
             name: "key_value_store".to_string(),
@@ -370,7 +357,7 @@ where
             Err(e) => Ok(ToolResult::Error(e.to_string())),
         }
     }
-    
+
     fn definition(&self) -> ToolFunction {
         ToolFunction {
             name: self.name.clone(),
@@ -383,30 +370,33 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_calculator_tool() {
         let calc = CalculatorTool;
-        
-        let result = calc.execute(r#"{"operation": "add", "a": 5, "b": 3}"#).await.unwrap();
+
+        let result = calc
+            .execute(r#"{"operation": "add", "a": 5, "b": 3}"#)
+            .await
+            .unwrap();
         match result {
             ToolResult::Success(val) => {
                 assert_eq!(val["result"], 8.0);
                 assert_eq!(val["operation"], "add");
-            },
+            }
             ToolResult::Error(e) => panic!("Unexpected error: {}", e),
         }
     }
-    
+
     #[test]
     fn test_tool_registry() {
         let mut registry = ToolRegistry::new();
-        
+
         registry.register("calculator", CalculatorTool);
-        
+
         assert!(registry.contains("calculator"));
         assert_eq!(registry.len(), 1);
-        
+
         let tools = registry.to_tools();
         assert_eq!(tools.len(), 1);
         assert_eq!(tools[0].function.name, "calculator");

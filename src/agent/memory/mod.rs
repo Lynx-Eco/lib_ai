@@ -1,7 +1,9 @@
 mod base;
-mod surrealdb;
 mod semantic;
+mod surrealdb;
 
-pub use base::{Memory, MemoryStats, InMemoryStore, SemanticMemoryStore, PersistentMemoryStore, MemoryStore};
-pub use surrealdb::{SurrealMemoryStore, SurrealMemoryConfig};
+pub use base::{
+    InMemoryStore, Memory, MemoryStats, MemoryStore, PersistentMemoryStore, SemanticMemoryStore,
+};
 pub use semantic::{EnhancedSemanticMemory as SemanticMemory, SemanticMemoryBuilder};
+pub use surrealdb::{SurrealMemoryConfig, SurrealMemoryStore};

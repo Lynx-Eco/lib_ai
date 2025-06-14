@@ -1,10 +1,13 @@
 use async_trait::async_trait;
+use futures::stream::{Stream, StreamExt};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use futures::stream::{Stream, StreamExt};
 use std::pin::Pin;
 
-use crate::{CompletionProvider, CompletionRequest, CompletionResponse, StreamChunk, Result, AiError, Message, Role, Choice, Usage, MessageContent, ContentPart, Delta};
+use crate::{
+    AiError, Choice, CompletionProvider, CompletionRequest, CompletionResponse, ContentPart, Delta,
+    Message, MessageContent, Result, Role, StreamChunk, Usage,
+};
 
 pub struct GeminiProvider {
     client: Client,
@@ -82,7 +85,7 @@ struct GeminiUsage {
 impl CompletionProvider for GeminiProvider {
     async fn complete(&self, request: CompletionRequest) -> Result<CompletionResponse> {
         let contents = convert_messages_to_gemini(request.messages);
-        
+
         let gemini_request = GeminiRequest {
             contents,
             generation_config: Some(GenerationConfig {
@@ -98,7 +101,8 @@ impl CompletionProvider for GeminiProvider {
             format!("models/{}", request.model)
         };
 
-        let response = self.client
+        let response = self
+            .client
             .post(format!(
                 "https://generativelanguage.googleapis.com/v1/{}:generateContent?key={}",
                 model_name, self.api_key
@@ -109,28 +113,38 @@ impl CompletionProvider for GeminiProvider {
 
         if !response.status().is_success() {
             let error_text = response.text().await?;
-            return Err(AiError::ProviderError { provider: "gemini".to_string(), message: format!("Gemini API error: {}", error_text), error_code: None, retryable: true });
+            return Err(AiError::ProviderError {
+                provider: "gemini".to_string(),
+                message: format!("Gemini API error: {}", error_text),
+                error_code: None,
+                retryable: true,
+            });
         }
 
         let gemini_response: GeminiResponse = response.json().await?;
-        
-        let choices = gemini_response.candidates.into_iter().map(|candidate| {
-            Choice {
+
+        let choices = gemini_response
+            .candidates
+            .into_iter()
+            .map(|candidate| Choice {
                 index: candidate.index,
                 message: Message {
                     role: Role::Assistant,
                     content: MessageContent::text(
-                        candidate.content.parts.iter()
+                        candidate
+                            .content
+                            .parts
+                            .iter()
                             .map(|p| p.text.clone())
                             .collect::<Vec<_>>()
-                            .join("")
+                            .join(""),
                     ),
                     tool_calls: None,
                     tool_call_id: None,
                 },
                 finish_reason: candidate.finish_reason,
-            }
-        }).collect();
+            })
+            .collect();
 
         let usage = gemini_response.usage_metadata.map(|u| Usage {
             prompt_tokens: u.prompt_token_count,
@@ -151,7 +165,7 @@ impl CompletionProvider for GeminiProvider {
         request: CompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamChunk>> + Send>>> {
         let contents = convert_messages_to_gemini(request.messages);
-        
+
         let gemini_request = GeminiRequest {
             contents,
             generation_config: Some(GenerationConfig {
@@ -167,7 +181,8 @@ impl CompletionProvider for GeminiProvider {
             format!("models/{}", request.model)
         };
 
-        let response = self.client
+        let response = self
+            .client
             .post(format!(
                 "https://generativelanguage.googleapis.com/v1/{}:streamGenerateContent?key={}",
                 model_name, self.api_key
@@ -178,25 +193,33 @@ impl CompletionProvider for GeminiProvider {
 
         if !response.status().is_success() {
             let error_text = response.text().await?;
-            return Err(AiError::ProviderError { provider: "gemini".to_string(), message: format!("Gemini API error: {}", error_text), error_code: None, retryable: true });
+            return Err(AiError::ProviderError {
+                provider: "gemini".to_string(),
+                message: format!("Gemini API error: {}", error_text),
+                error_code: None,
+                retryable: true,
+            });
         }
 
         let stream = response.bytes_stream();
-        let stream = stream.map(move |result| {
-            match result {
+        let stream = stream
+            .map(move |result| match result {
                 Ok(bytes) => {
                     let text = String::from_utf8_lossy(&bytes);
                     parse_gemini_stream(&text, &model_name)
                 }
-                Err(e) => Err(AiError::StreamError { message: e.to_string(), retryable: true }),
-            }
-        }).filter_map(|result| async move {
-            match result {
-                Ok(Some(chunk)) => Some(Ok(chunk)),
-                Ok(None) => None,
-                Err(e) => Some(Err(e)),
-            }
-        });
+                Err(e) => Err(AiError::StreamError {
+                    message: e.to_string(),
+                    retryable: true,
+                }),
+            })
+            .filter_map(|result| async move {
+                match result {
+                    Ok(Some(chunk)) => Some(Ok(chunk)),
+                    Ok(None) => None,
+                    Err(e) => Some(Err(e)),
+                }
+            });
 
         Ok(Box::pin(stream))
     }
@@ -223,7 +246,7 @@ impl CompletionProvider for GeminiProvider {
 fn convert_messages_to_gemini(messages: Vec<Message>) -> Vec<GeminiContent> {
     let mut contents = Vec::new();
     let mut system_message = None;
-    
+
     for message in messages {
         match message.role {
             Role::System => {
@@ -242,35 +265,38 @@ fn convert_messages_to_gemini(messages: Vec<Message>) -> Vec<GeminiContent> {
             }
             Role::Assistant => {
                 contents.push(GeminiContent {
-                    parts: vec![GeminiPart { text: extract_text_from_content(&message.content) }],
+                    parts: vec![GeminiPart {
+                        text: extract_text_from_content(&message.content),
+                    }],
                     role: "model".to_string(),
                 });
             }
             Role::Tool => {
                 // Tool responses are sent as user messages in Gemini
                 contents.push(GeminiContent {
-                    parts: vec![GeminiPart { text: extract_text_from_content(&message.content) }],
+                    parts: vec![GeminiPart {
+                        text: extract_text_from_content(&message.content),
+                    }],
                     role: "user".to_string(),
                 });
             }
         }
     }
-    
+
     contents
 }
 
 fn extract_text_from_content(content: &MessageContent) -> String {
     match content {
         MessageContent::Text(s) => s.clone(),
-        MessageContent::Parts(parts) => {
-            parts.iter()
-                .filter_map(|p| match p {
-                    ContentPart::Text { text } => Some(text.clone()),
-                    _ => None,
-                })
-                .collect::<Vec<_>>()
-                .join(" ")
-        }
+        MessageContent::Parts(parts) => parts
+            .iter()
+            .filter_map(|p| match p {
+                ContentPart::Text { text } => Some(text.clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .join(" "),
     }
 }
 

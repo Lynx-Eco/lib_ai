@@ -1,13 +1,13 @@
 use async_trait::async_trait;
+use futures::stream::{Stream, StreamExt};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use futures::stream::{Stream, StreamExt};
 use std::pin::Pin;
 
 use crate::{
-    CompletionProvider, CompletionRequest, CompletionResponse, StreamChunk, Result, AiError, 
-    Role, MessageContent, ToolCall, Tool, ToolChoice, ResponseFormat, ContentPart, Message,
-    Choice, Usage, Delta, StreamChoice, ToolCallDelta
+    AiError, Choice, CompletionProvider, CompletionRequest, CompletionResponse, ContentPart, Delta,
+    Message, MessageContent, ResponseFormat, Result, Role, StreamChoice, StreamChunk, Tool,
+    ToolCall, ToolCallDelta, ToolChoice, Usage,
 };
 
 pub struct OpenAIProvider {
@@ -33,18 +33,21 @@ impl OpenAIProvider {
         let content = match msg.content {
             MessageContent::Text(text) => OpenAIContent::String(text),
             MessageContent::Parts(parts) => OpenAIContent::Array(
-                parts.into_iter().map(|part| match part {
-                    ContentPart::Text { text } => OpenAIContentPart {
-                        r#type: "text".to_string(),
-                        text: Some(text),
-                        image_url: None,
-                    },
-                    ContentPart::Image { image_url } => OpenAIContentPart {
-                        r#type: "image_url".to_string(),
-                        text: None,
-                        image_url: Some(image_url),
-                    },
-                }).collect()
+                parts
+                    .into_iter()
+                    .map(|part| match part {
+                        ContentPart::Text { text } => OpenAIContentPart {
+                            r#type: "text".to_string(),
+                            text: Some(text),
+                            image_url: None,
+                        },
+                        ContentPart::Image { image_url } => OpenAIContentPart {
+                            r#type: "image_url".to_string(),
+                            text: None,
+                            image_url: Some(image_url),
+                        },
+                    })
+                    .collect(),
             ),
         };
 
@@ -65,36 +68,44 @@ impl OpenAIProvider {
         CompletionResponse {
             id: resp.id,
             model: resp.model,
-            choices: resp.choices.into_iter().map(|c| Choice {
-                index: c.index,
-                message: Message {
-                    role: match c.message.role.as_str() {
-                        "system" => Role::System,
-                        "user" => Role::User,
-                        "assistant" => Role::Assistant,
-                        "tool" => Role::Tool,
-                        _ => Role::Assistant,
+            choices: resp
+                .choices
+                .into_iter()
+                .map(|c| Choice {
+                    index: c.index,
+                    message: Message {
+                        role: match c.message.role.as_str() {
+                            "system" => Role::System,
+                            "user" => Role::User,
+                            "assistant" => Role::Assistant,
+                            "tool" => Role::Tool,
+                            _ => Role::Assistant,
+                        },
+                        content: match c.message.content {
+                            Some(OpenAIContent::String(s)) => MessageContent::Text(s),
+                            Some(OpenAIContent::Array(parts)) => MessageContent::Parts(
+                                parts
+                                    .into_iter()
+                                    .filter_map(|p| {
+                                        if p.r#type == "text" {
+                                            p.text.map(|text| ContentPart::Text { text })
+                                        } else if p.r#type == "image_url" {
+                                            p.image_url
+                                                .map(|image_url| ContentPart::Image { image_url })
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                    .collect(),
+                            ),
+                            None => MessageContent::Text("".to_string()),
+                        },
+                        tool_calls: c.message.tool_calls,
+                        tool_call_id: None,
                     },
-                    content: match c.message.content {
-                        Some(OpenAIContent::String(s)) => MessageContent::Text(s),
-                        Some(OpenAIContent::Array(parts)) => MessageContent::Parts(
-                            parts.into_iter().filter_map(|p| {
-                                if p.r#type == "text" {
-                                    p.text.map(|text| ContentPart::Text { text })
-                                } else if p.r#type == "image_url" {
-                                    p.image_url.map(|image_url| ContentPart::Image { image_url })
-                                } else {
-                                    None
-                                }
-                            }).collect()
-                        ),
-                        None => MessageContent::Text("".to_string()),
-                    },
-                    tool_calls: c.message.tool_calls,
-                    tool_call_id: None,
-                },
-                finish_reason: c.finish_reason,
-            }).collect(),
+                    finish_reason: c.finish_reason,
+                })
+                .collect(),
             usage: resp.usage,
         }
     }
@@ -204,7 +215,11 @@ impl CompletionProvider for OpenAIProvider {
     async fn complete(&self, request: CompletionRequest) -> Result<CompletionResponse> {
         let openai_request = OpenAIRequest {
             model: request.model,
-            messages: request.messages.into_iter().map(|m| self.convert_message(m)).collect(),
+            messages: request
+                .messages
+                .into_iter()
+                .map(|m| self.convert_message(m))
+                .collect(),
             temperature: request.temperature,
             max_tokens: request.max_tokens,
             stream: Some(false),
@@ -217,7 +232,8 @@ impl CompletionProvider for OpenAIProvider {
             response_format: request.response_format,
         };
 
-        let response = self.client
+        let response = self
+            .client
             .post(format!("{}/chat/completions", self.base_url))
             .header("Authorization", format!("Bearer {}", self.api_key))
             .json(&openai_request)
@@ -226,7 +242,12 @@ impl CompletionProvider for OpenAIProvider {
 
         if !response.status().is_success() {
             let error_text = response.text().await?;
-            return Err(AiError::ProviderError { provider: "openai".to_string(), message: format!("OpenAI API error: {}", error_text), error_code: None, retryable: true });
+            return Err(AiError::ProviderError {
+                provider: "openai".to_string(),
+                message: format!("OpenAI API error: {}", error_text),
+                error_code: None,
+                retryable: true,
+            });
         }
 
         let openai_response: OpenAIResponse = response.json().await?;
@@ -239,7 +260,11 @@ impl CompletionProvider for OpenAIProvider {
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamChunk>> + Send>>> {
         let openai_request = OpenAIRequest {
             model: request.model,
-            messages: request.messages.into_iter().map(|m| self.convert_message(m)).collect(),
+            messages: request
+                .messages
+                .into_iter()
+                .map(|m| self.convert_message(m))
+                .collect(),
             temperature: request.temperature,
             max_tokens: request.max_tokens,
             stream: Some(true),
@@ -252,7 +277,8 @@ impl CompletionProvider for OpenAIProvider {
             response_format: request.response_format,
         };
 
-        let response = self.client
+        let response = self
+            .client
             .post(format!("{}/chat/completions", self.base_url))
             .header("Authorization", format!("Bearer {}", self.api_key))
             .json(&openai_request)
@@ -261,25 +287,33 @@ impl CompletionProvider for OpenAIProvider {
 
         if !response.status().is_success() {
             let error_text = response.text().await?;
-            return Err(AiError::ProviderError { provider: "openai".to_string(), message: format!("OpenAI API error: {}", error_text), error_code: None, retryable: true });
+            return Err(AiError::ProviderError {
+                provider: "openai".to_string(),
+                message: format!("OpenAI API error: {}", error_text),
+                error_code: None,
+                retryable: true,
+            });
         }
 
         let stream = response.bytes_stream();
-        let stream = stream.map(|result| {
-            match result {
+        let stream = stream
+            .map(|result| match result {
                 Ok(bytes) => {
                     let text = String::from_utf8_lossy(&bytes);
                     parse_openai_sse(&text)
                 }
-                Err(e) => Err(AiError::StreamError { message: e.to_string(), retryable: true }),
-            }
-        }).filter_map(|result| async move {
-            match result {
-                Ok(Some(chunk)) => Some(Ok(chunk)),
-                Ok(None) => None,
-                Err(e) => Some(Err(e)),
-            }
-        });
+                Err(e) => Err(AiError::StreamError {
+                    message: e.to_string(),
+                    retryable: true,
+                }),
+            })
+            .filter_map(|result| async move {
+                match result {
+                    Ok(Some(chunk)) => Some(Ok(chunk)),
+                    Ok(None) => None,
+                    Err(e) => Some(Err(e)),
+                }
+            });
 
         Ok(Box::pin(stream))
     }
@@ -312,25 +346,29 @@ fn parse_openai_sse(data: &str) -> Result<Option<StreamChunk>> {
             if json_str == "[DONE]" {
                 return Ok(None);
             }
-            
+
             if let Ok(chunk) = serde_json::from_str::<OpenAIStreamChunk>(json_str) {
                 return Ok(Some(StreamChunk {
                     id: chunk.id,
-                    choices: chunk.choices.into_iter().map(|c| StreamChoice {
-                        index: c.index,
-                        delta: Delta {
-                            role: c.delta.role.map(|r| match r.as_str() {
-                                "system" => Role::System,
-                                "user" => Role::User,
-                                "assistant" => Role::Assistant,
-                                "tool" => Role::Tool,
-                                _ => Role::User,
-                            }),
-                            content: c.delta.content,
-                            tool_calls: c.delta.tool_calls,
-                        },
-                        finish_reason: c.finish_reason,
-                    }).collect(),
+                    choices: chunk
+                        .choices
+                        .into_iter()
+                        .map(|c| StreamChoice {
+                            index: c.index,
+                            delta: Delta {
+                                role: c.delta.role.map(|r| match r.as_str() {
+                                    "system" => Role::System,
+                                    "user" => Role::User,
+                                    "assistant" => Role::Assistant,
+                                    "tool" => Role::Tool,
+                                    _ => Role::User,
+                                }),
+                                content: c.delta.content,
+                                tool_calls: c.delta.tool_calls,
+                            },
+                            finish_reason: c.finish_reason,
+                        })
+                        .collect(),
                     model: Some(chunk.model),
                 }));
             }

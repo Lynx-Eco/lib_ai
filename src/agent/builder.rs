@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
-use crate::{
-    CompletionProvider,
-    observability::{MetricsCollector, AgentTracer, CostTracker, TelemetryExporter},
-};
-use super::{ Agent, Context, Memory, ToolRegistry, ToolExecutor };
 use super::agent::AgentConfig;
+use super::{Agent, Context, Memory, ToolExecutor, ToolRegistry};
+use crate::{
+    observability::{AgentTracer, CostTracker, MetricsCollector, TelemetryExporter},
+    CompletionProvider,
+};
 
 /// Builder for creating an Agent with a fluent API
 pub struct AgentBuilder {
@@ -87,7 +87,7 @@ impl AgentBuilder {
         self.config.top_p = Some(top_p);
         self
     }
-    
+
     /// Set the response format
     pub fn response_format(mut self, format: crate::ResponseFormat) -> Self {
         self.config.response_format = Some(format);
@@ -114,7 +114,9 @@ impl AgentBuilder {
 
     /// Add a single tool
     pub fn tool<S, E>(mut self, name: S, executor: E) -> Self
-        where S: Into<String>, E: ToolExecutor + 'static
+    where
+        S: Into<String>,
+        E: ToolExecutor + 'static,
     {
         if self.tools.is_none() {
             self.tools = Some(ToolRegistry::new());
@@ -136,7 +138,8 @@ impl AgentBuilder {
     /// Add initial context messages
     pub fn context(mut self, context: Context) -> Self {
         // Preserve system messages
-        let system_messages = self.context
+        let system_messages = self
+            .context
             .messages()
             .filter(|m| matches!(m.role, crate::Role::System))
             .cloned()
@@ -146,11 +149,14 @@ impl AgentBuilder {
 
         // Re-add system messages at the beginning
         for (i, msg) in system_messages.into_iter().enumerate() {
-            self.context.messages_mut().insert(i, super::context::ContextMessage {
-                message: msg,
-                timestamp: std::time::SystemTime::now(),
-                metadata: None,
-            });
+            self.context.messages_mut().insert(
+                i,
+                super::context::ContextMessage {
+                    message: msg,
+                    timestamp: std::time::SystemTime::now(),
+                    metadata: None,
+                },
+            );
         }
 
         self
@@ -210,17 +216,26 @@ impl AgentBuilder {
 
     /// Build the agent
     pub fn build(self) -> Result<Agent, String> {
-        let provider = self.provider.ok_or_else(|| "Provider is required".to_string())?;
+        let provider = self
+            .provider
+            .ok_or_else(|| "Provider is required".to_string())?;
 
         let prompt = self.prompt.unwrap_or_default();
 
-        let agent = Agent::new(provider, prompt, self.context, self.memory, self.tools, self.config)
-            .with_observability(
-                self.metrics_collector,
-                self.tracer,
-                self.cost_tracker,
-                self.telemetry_exporter,
-            );
+        let agent = Agent::new(
+            provider,
+            prompt,
+            self.context,
+            self.memory,
+            self.tools,
+            self.config,
+        )
+        .with_observability(
+            self.metrics_collector,
+            self.tracer,
+            self.cost_tracker,
+            self.telemetry_exporter,
+        );
 
         Ok(agent)
     }

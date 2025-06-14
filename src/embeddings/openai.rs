@@ -3,8 +3,8 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    provider::{EmbeddingProvider, EmbeddingError, Result},
     models::{Embedding, EmbeddingRequest, EmbeddingResponse, EmbeddingUsage},
+    provider::{EmbeddingError, EmbeddingProvider, Result},
 };
 
 pub struct OpenAIEmbeddingProvider {
@@ -21,7 +21,7 @@ impl OpenAIEmbeddingProvider {
             base_url: "https://api.openai.com/v1".to_string(),
         }
     }
-    
+
     pub fn with_base_url(api_key: String, base_url: String) -> Self {
         Self {
             client: Client::new(),
@@ -62,29 +62,34 @@ impl EmbeddingProvider for OpenAIEmbeddingProvider {
             input: request.input,
             model: request.model,
         };
-        
-        let response = self.client
+
+        let response = self
+            .client
             .post(format!("{}/embeddings", self.base_url))
             .header("Authorization", format!("Bearer {}", self.api_key))
             .json(&openai_request)
             .send()
             .await?;
-        
+
         if !response.status().is_success() {
             let error_text = response.text().await?;
-            return Err(EmbeddingError::ProviderError(format!("OpenAI API error: {}", error_text)));
+            return Err(EmbeddingError::ProviderError(format!(
+                "OpenAI API error: {}",
+                error_text
+            )));
         }
-        
+
         let openai_response: OpenAIEmbeddingResponse = response.json().await?;
-        
-        let embeddings = openai_response.data
+
+        let embeddings = openai_response
+            .data
             .into_iter()
             .map(|e| Embedding {
                 vector: e.embedding,
                 index: e.index,
             })
             .collect();
-        
+
         Ok(EmbeddingResponse {
             embeddings,
             usage: Some(EmbeddingUsage {
@@ -93,11 +98,11 @@ impl EmbeddingProvider for OpenAIEmbeddingProvider {
             }),
         })
     }
-    
+
     fn default_model(&self) -> &str {
         "text-embedding-3-small"
     }
-    
+
     fn dimension(&self) -> usize {
         1536 // dimension for text-embedding-3-small
     }
@@ -121,7 +126,7 @@ impl OpenAIEmbeddingModel {
             Self::TextEmbeddingAda002 => "text-embedding-ada-002",
         }
     }
-    
+
     pub fn dimension(&self) -> usize {
         match self {
             Self::TextEmbedding3Small => 1536,

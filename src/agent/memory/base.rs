@@ -8,13 +8,13 @@ use crate::agent::AgentError;
 pub trait Memory: Send + Sync {
     /// Store a conversation turn in memory
     async fn store(&mut self, input: &str, output: &str) -> Result<(), AgentError>;
-    
+
     /// Retrieve relevant memories based on a query
     async fn retrieve(&self, query: &str, limit: usize) -> Result<Vec<String>, AgentError>;
-    
+
     /// Clear all memories
     async fn clear(&mut self) -> Result<(), AgentError>;
-    
+
     /// Get memory statistics
     async fn stats(&self) -> Result<MemoryStats, AgentError>;
 }
@@ -55,35 +55,36 @@ impl InMemoryStore {
 impl Memory for InMemoryStore {
     async fn store(&mut self, input: &str, output: &str) -> Result<(), AgentError> {
         let mut entries = self.entries.lock().unwrap();
-        
+
         entries.push(MemoryEntry {
             input: input.to_string(),
             output: output.to_string(),
             timestamp: std::time::SystemTime::now(),
         });
-        
+
         // Enforce max entries limit
         if entries.len() > self.max_entries {
             entries.remove(0);
         }
-        
+
         Ok(())
     }
-    
+
     async fn retrieve(&self, query: &str, limit: usize) -> Result<Vec<String>, AgentError> {
         let entries = self.entries.lock().unwrap();
-        
+
         // Simple similarity: find entries where input contains query words
         let query_words: Vec<&str> = query.split_whitespace().collect();
-        
+
         let mut matches: Vec<(usize, &MemoryEntry)> = entries
             .iter()
             .enumerate()
             .filter_map(|(_idx, entry)| {
-                let score = query_words.iter()
+                let score = query_words
+                    .iter()
                     .filter(|word| entry.input.to_lowercase().contains(&word.to_lowercase()))
                     .count();
-                
+
                 if score > 0 {
                     Some((score, entry))
                 } else {
@@ -91,36 +92,31 @@ impl Memory for InMemoryStore {
                 }
             })
             .collect();
-        
+
         // Sort by relevance (score) descending
         matches.sort_by(|a, b| b.0.cmp(&a.0));
-        
+
         // Take top matches and format
         let results = matches
             .into_iter()
             .take(limit)
-            .map(|(_, entry)| {
-                format!("User: {}\nAssistant: {}", entry.input, entry.output)
-            })
+            .map(|(_, entry)| format!("User: {}\nAssistant: {}", entry.input, entry.output))
             .collect();
-        
+
         Ok(results)
     }
-    
+
     async fn clear(&mut self) -> Result<(), AgentError> {
         let mut entries = self.entries.lock().unwrap();
         entries.clear();
         Ok(())
     }
-    
+
     async fn stats(&self) -> Result<MemoryStats, AgentError> {
         let entries = self.entries.lock().unwrap();
-        
-        let total_size_bytes: usize = entries
-            .iter()
-            .map(|e| e.input.len() + e.output.len())
-            .sum();
-        
+
+        let total_size_bytes: usize = entries.iter().map(|e| e.input.len() + e.output.len()).sum();
+
         Ok(MemoryStats {
             total_entries: entries.len(),
             total_size_bytes,
@@ -151,18 +147,18 @@ impl Memory for SemanticMemoryStore {
         // 2. Store in vector database
         self.base.store(input, output).await
     }
-    
+
     async fn retrieve(&self, query: &str, limit: usize) -> Result<Vec<String>, AgentError> {
         // In a real implementation, this would:
         // 1. Generate embedding for query
         // 2. Perform semantic search in vector database
         self.base.retrieve(query, limit).await
     }
-    
+
     async fn clear(&mut self) -> Result<(), AgentError> {
         self.base.clear().await
     }
-    
+
     async fn stats(&self) -> Result<MemoryStats, AgentError> {
         self.base.stats().await
     }
@@ -180,24 +176,24 @@ impl PersistentMemoryStore {
             base: InMemoryStore::new(max_entries),
             file_path,
         };
-        
+
         // Load existing data if file exists
         if store.file_path.exists() {
             store.load_from_disk()?;
         }
-        
+
         Ok(store)
     }
-    
+
     fn load_from_disk(&mut self) -> Result<(), AgentError> {
         use std::fs;
-        
+
         let content = fs::read_to_string(&self.file_path)
             .map_err(|e| AgentError::MemoryError(format!("Failed to read memory file: {}", e)))?;
-        
+
         let entries: Vec<(String, String)> = serde_json::from_str(&content)
             .map_err(|e| AgentError::MemoryError(format!("Failed to parse memory file: {}", e)))?;
-        
+
         let base_clone = self.base.clone();
         let rt = tokio::runtime::Handle::current();
         for (input, output) in entries {
@@ -206,25 +202,25 @@ impl PersistentMemoryStore {
                 base.store(&input, &output).await
             })?;
         }
-        
+
         Ok(())
     }
-    
+
     fn save_to_disk(&self) -> Result<(), AgentError> {
         use std::fs;
-        
+
         let entries = self.base.entries.lock().unwrap();
         let data: Vec<(&str, &str)> = entries
             .iter()
             .map(|e| (e.input.as_str(), e.output.as_str()))
             .collect();
-        
+
         let content = serde_json::to_string_pretty(&data)
             .map_err(|e| AgentError::MemoryError(format!("Failed to serialize memory: {}", e)))?;
-        
+
         fs::write(&self.file_path, content)
             .map_err(|e| AgentError::MemoryError(format!("Failed to write memory file: {}", e)))?;
-        
+
         Ok(())
     }
 }
@@ -236,17 +232,17 @@ impl Memory for PersistentMemoryStore {
         self.save_to_disk()?;
         Ok(())
     }
-    
+
     async fn retrieve(&self, query: &str, limit: usize) -> Result<Vec<String>, AgentError> {
         self.base.retrieve(query, limit).await
     }
-    
+
     async fn clear(&mut self) -> Result<(), AgentError> {
         self.base.clear().await?;
         self.save_to_disk()?;
         Ok(())
     }
-    
+
     async fn stats(&self) -> Result<MemoryStats, AgentError> {
         self.base.stats().await
     }
@@ -256,7 +252,7 @@ impl Memory for PersistentMemoryStore {
 pub trait MemoryStore: Memory {
     /// Create a new instance of the memory store
     fn new() -> Self;
-    
+
     /// Get the name of the memory store
     fn name(&self) -> &'static str;
 }
@@ -264,20 +260,29 @@ pub trait MemoryStore: Memory {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_in_memory_store() {
         let mut store = InMemoryStore::new(10);
-        
+
         // Store some conversations
-        store.store("What's the weather?", "I don't have access to weather data.").await.unwrap();
-        store.store("Tell me a joke", "Why did the chicken cross the road?").await.unwrap();
-        
+        store
+            .store(
+                "What's the weather?",
+                "I don't have access to weather data.",
+            )
+            .await
+            .unwrap();
+        store
+            .store("Tell me a joke", "Why did the chicken cross the road?")
+            .await
+            .unwrap();
+
         // Retrieve relevant memories
         let results = store.retrieve("weather", 5).await.unwrap();
         assert_eq!(results.len(), 1);
         assert!(results[0].contains("weather"));
-        
+
         // Test stats
         let stats = store.stats().await.unwrap();
         assert_eq!(stats.total_entries, 2);

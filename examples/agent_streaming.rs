@@ -1,5 +1,5 @@
-use lib_ai::{ agent::AgentBuilder, providers::OpenAIProvider };
 use futures::StreamExt;
+use lib_ai::{agent::AgentBuilder, providers::OpenAIProvider};
 use tokio;
 
 #[tokio::main]
@@ -27,9 +27,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("User: Tell me a short story about a robot learning to paint");
     println!("\nAssistant: ");
 
-    let mut stream = agent.execute_stream(
-        "Tell me a short story about a robot learning to paint"
-    ).await?;
+    let mut stream = agent
+        .execute_stream("Tell me a short story about a robot learning to paint")
+        .await?;
 
     // Print the response as it streams
     while let Some(chunk) = stream.next().await {

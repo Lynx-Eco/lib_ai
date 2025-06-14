@@ -1,12 +1,12 @@
-use lib_ai::{providers::*, CompletionProvider, CompletionRequest, Message, Role, MessageContent};
+use lib_ai::{providers::*, CompletionProvider, CompletionRequest, Message, MessageContent, Role};
 use tokio;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let api_key = std::env::var("OPENAI_API_KEY")?;
-    
+
     let provider = OpenAIProvider::new(api_key);
-    
+
     let request = CompletionRequest {
         model: provider.default_model().to_string(),
         messages: vec![
@@ -35,19 +35,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         response_format: None,
         json_schema: None,
     };
-    
+
     let response = provider.complete(request).await?;
-    
+
     println!("Model: {}", response.model);
     for choice in response.choices {
         if let Some(text) = choice.message.content.as_text() {
             println!("Response: {}", text);
         }
     }
-    
+
     if let Some(usage) = response.usage {
         println!("Tokens used: {}", usage.total_tokens);
     }
-    
+
     Ok(())
 }

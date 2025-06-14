@@ -2,28 +2,28 @@ use async_trait::async_trait;
 use futures::stream::Stream;
 use std::pin::Pin;
 
-use crate::{models::*, error::Result};
+use crate::{error::Result, models::*};
 
 #[async_trait]
 pub trait CompletionProvider: Send + Sync {
     async fn complete(&self, request: CompletionRequest) -> Result<CompletionResponse>;
-    
+
     async fn complete_stream(
         &self,
         request: CompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamChunk>> + Send>>>;
-    
+
     fn name(&self) -> &'static str;
-    
+
     fn default_model(&self) -> &'static str;
-    
+
     fn available_models(&self) -> Vec<&'static str>;
 }
 
 #[async_trait]
 pub trait ModelProvider {
     fn list_models(&self) -> Vec<ModelInfo>;
-    
+
     fn get_model_info(&self, model_name: &str) -> Option<ModelInfo>;
 }
 

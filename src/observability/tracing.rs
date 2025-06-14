@@ -1,8 +1,8 @@
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 /// Represents a single trace event in the system
@@ -70,11 +70,11 @@ impl TraceSpan {
     pub fn set_tag(&mut self, key: String, value: String) {
         self.event.tags.insert(key, value);
     }
-    
+
     pub fn set_baggage(&mut self, key: String, value: String) {
         self.event.baggage.insert(key, value);
     }
-    
+
     pub fn log(&mut self, level: LogLevel, message: String, fields: HashMap<String, String>) {
         let log = TraceLog {
             timestamp: Utc::now(),
@@ -84,28 +84,29 @@ impl TraceSpan {
         };
         self.event.logs.push(log);
     }
-    
+
     pub fn log_info(&mut self, message: String) {
         self.log(LogLevel::Info, message, HashMap::new());
     }
-    
+
     pub fn log_error(&mut self, message: String) {
         self.log(LogLevel::Error, message, HashMap::new());
         self.event.status = TraceStatus::Error;
     }
-    
+
     pub fn set_status(&mut self, status: TraceStatus) {
         self.event.status = status;
     }
-    
+
     pub fn finish(mut self) {
         self.event.end_time = Some(Utc::now());
         self.event.duration = Some(self.start_instant.elapsed());
         self.tracer.finish_span(self.event);
     }
-    
+
     pub fn child_span(&self, operation_name: String) -> TraceSpan {
-        self.tracer.start_span_with_parent(operation_name, Some(self.event.span_id.clone()))
+        self.tracer
+            .start_span_with_parent(operation_name, Some(self.event.span_id.clone()))
     }
 }
 
@@ -145,23 +146,23 @@ impl AgentTracer {
             config,
         }
     }
-    
+
     pub fn start_trace(&self, operation_name: String) -> Option<TraceSpan> {
         if !self.config.enabled || !self.should_sample() {
             return None;
         }
-        
+
         let trace_id = Uuid::new_v4().to_string();
         *self.current_trace.write().unwrap() = Some(trace_id.clone());
-        
+
         Some(self.start_span_with_trace(operation_name, trace_id, None))
     }
-    
+
     pub fn start_span(&self, operation_name: String) -> Option<TraceSpan> {
         if !self.config.enabled {
             return None;
         }
-        
+
         let current_trace = self.current_trace.read().unwrap().clone();
         if let Some(trace_id) = current_trace {
             Some(self.start_span_with_trace(operation_name, trace_id, None))
@@ -169,18 +170,27 @@ impl AgentTracer {
             self.start_trace(operation_name)
         }
     }
-    
-    pub fn start_span_with_parent(&self, operation_name: String, parent_span_id: Option<String>) -> TraceSpan {
+
+    pub fn start_span_with_parent(
+        &self,
+        operation_name: String,
+        parent_span_id: Option<String>,
+    ) -> TraceSpan {
         let current_trace = self.current_trace.read().unwrap().clone();
         let trace_id = current_trace.unwrap_or_else(|| Uuid::new_v4().to_string());
-        
+
         self.start_span_with_trace(operation_name, trace_id, parent_span_id)
     }
-    
-    fn start_span_with_trace(&self, operation_name: String, trace_id: String, parent_span_id: Option<String>) -> TraceSpan {
+
+    fn start_span_with_trace(
+        &self,
+        operation_name: String,
+        trace_id: String,
+        parent_span_id: Option<String>,
+    ) -> TraceSpan {
         let span_id = Uuid::new_v4().to_string();
         let now = Utc::now();
-        
+
         let event = TraceEvent {
             trace_id: trace_id.clone(),
             span_id: span_id.clone(),
@@ -194,23 +204,25 @@ impl AgentTracer {
             logs: Vec::new(),
             baggage: HashMap::new(),
         };
-        
+
         TraceSpan {
             event,
             start_instant: Instant::now(),
             tracer: Arc::new(self.clone()),
         }
     }
-    
+
     fn finish_span(&self, event: TraceEvent) {
         let mut traces = self.traces.write().unwrap();
-        let trace_spans = traces.entry(event.trace_id.clone()).or_insert_with(Vec::new);
-        
+        let trace_spans = traces
+            .entry(event.trace_id.clone())
+            .or_insert_with(Vec::new);
+
         // Limit spans per trace
         if trace_spans.len() < self.config.max_spans_per_trace {
             trace_spans.push(event);
         }
-        
+
         // Limit total traces
         if traces.len() > self.config.max_traces {
             // Remove oldest trace (simple FIFO)
@@ -219,25 +231,25 @@ impl AgentTracer {
             }
         }
     }
-    
+
     fn should_sample(&self) -> bool {
         use rand::Rng;
         let mut rng = rand::thread_rng();
         rng.gen::<f64>() < self.config.sample_rate
     }
-    
+
     pub fn get_trace(&self, trace_id: &str) -> Option<Vec<TraceEvent>> {
         self.traces.read().unwrap().get(trace_id).cloned()
     }
-    
+
     pub fn get_all_traces(&self) -> HashMap<String, Vec<TraceEvent>> {
         self.traces.read().unwrap().clone()
     }
-    
+
     pub fn clear_traces(&self) {
         self.traces.write().unwrap().clear();
     }
-    
+
     pub fn export_traces(&self) -> serde_json::Value {
         let traces = self.get_all_traces();
         serde_json::json!({
@@ -250,7 +262,7 @@ impl AgentTracer {
             }
         })
     }
-    
+
     pub fn finish_trace(&self) {
         *self.current_trace.write().unwrap() = None;
     }
@@ -300,47 +312,50 @@ mod tests {
     use super::*;
     use std::thread;
     use std::time::Duration;
-    
+
     #[test]
     fn test_trace_creation() {
         let config = TracingConfig::default();
         let tracer = AgentTracer::new(config);
-        
+
         let span = tracer.start_trace("test_operation".to_string()).unwrap();
         let trace_id = span.event.trace_id.clone();
         span.finish();
-        
+
         let traces = tracer.get_trace(&trace_id);
         assert!(traces.is_some());
         assert_eq!(traces.unwrap().len(), 1);
     }
-    
+
     #[test]
     fn test_nested_spans() {
         let config = TracingConfig::default();
         let tracer = AgentTracer::new(config);
-        
+
         let mut parent_span = tracer.start_trace("parent_operation".to_string()).unwrap();
         parent_span.set_tag("operation".to_string(), "parent".to_string());
-        
+
         let mut child_span = parent_span.child_span("child_operation".to_string());
         child_span.set_tag("operation".to_string(), "child".to_string());
         child_span.log_info("Child operation started".to_string());
-        
+
         thread::sleep(Duration::from_millis(10));
-        
+
         let trace_id = parent_span.event.trace_id.clone();
-        
+
         child_span.finish();
         parent_span.finish();
         let traces = tracer.get_trace(&trace_id).unwrap();
         assert_eq!(traces.len(), 2);
-        
+
         // Check parent-child relationship
-        let child = traces.iter().find(|t| t.operation_name == "child_operation").unwrap();
+        let child = traces
+            .iter()
+            .find(|t| t.operation_name == "child_operation")
+            .unwrap();
         assert!(child.parent_span_id.is_some());
     }
-    
+
     #[test]
     fn test_sampling() {
         let config = TracingConfig {
@@ -348,7 +363,7 @@ mod tests {
             ..Default::default()
         };
         let tracer = AgentTracer::new(config);
-        
+
         let span = tracer.start_trace("test_operation".to_string());
         assert!(span.is_none());
     }

@@ -1,13 +1,13 @@
 use async_trait::async_trait;
+use futures::stream::{Stream, StreamExt};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use futures::stream::{Stream, StreamExt};
 use std::pin::Pin;
 
 use crate::{
-    CompletionProvider, CompletionRequest, CompletionResponse, StreamChunk, Result, AiError, 
-    Message, Role, Choice, Usage, Delta, StreamChoice, MessageContent, ContentPart, 
-    ToolCall, ToolChoice, ToolCallDelta, ToolType, FunctionCall
+    AiError, Choice, CompletionProvider, CompletionRequest, CompletionResponse, ContentPart, Delta,
+    FunctionCall, Message, MessageContent, Result, Role, StreamChoice, StreamChunk, ToolCall,
+    ToolCallDelta, ToolChoice, ToolType, Usage,
 };
 use serde_json::Value;
 
@@ -134,16 +134,19 @@ struct AnthropicStreamEvent {
 impl CompletionProvider for AnthropicProvider {
     async fn complete(&self, request: CompletionRequest) -> Result<CompletionResponse> {
         let (system, messages) = split_system_message(request.messages);
-        
+
         // Convert tools if present
         let tools = request.tools.map(|tools| {
-            tools.into_iter().map(|tool| AnthropicTool {
-                name: tool.function.name,
-                description: tool.function.description.unwrap_or_default(),
-                input_schema: tool.function.parameters,
-            }).collect()
+            tools
+                .into_iter()
+                .map(|tool| AnthropicTool {
+                    name: tool.function.name,
+                    description: tool.function.description.unwrap_or_default(),
+                    input_schema: tool.function.parameters,
+                })
+                .collect()
         });
-        
+
         // Convert tool choice if present
         let tool_choice = request.tool_choice.map(|tc| match tc {
             ToolChoice::String(s) => match s.as_str() {
@@ -155,10 +158,13 @@ impl CompletionProvider for AnthropicProvider {
                 name: obj.function.name,
             },
         });
-        
+
         let anthropic_request = AnthropicRequest {
             model: request.model,
-            messages: messages.into_iter().map(|m| convert_message_to_anthropic(m)).collect(),
+            messages: messages
+                .into_iter()
+                .map(|m| convert_message_to_anthropic(m))
+                .collect(),
             max_tokens: request.max_tokens.unwrap_or(1024),
             temperature: request.temperature,
             stream: Some(false),
@@ -167,7 +173,8 @@ impl CompletionProvider for AnthropicProvider {
             tool_choice,
         };
 
-        let response = self.client
+        let response = self
+            .client
             .post("https://api.anthropic.com/v1/messages")
             .header("X-API-Key", &self.api_key)
             .header("anthropic-version", "2024-10-22")
@@ -178,24 +185,31 @@ impl CompletionProvider for AnthropicProvider {
 
         if !response.status().is_success() {
             let error_text = response.text().await?;
-            return Err(AiError::ProviderError { provider: "anthropic".to_string(), message: format!("Anthropic API error: {}", error_text), error_code: None, retryable: true });
+            return Err(AiError::ProviderError {
+                provider: "anthropic".to_string(),
+                message: format!("Anthropic API error: {}", error_text),
+                error_code: None,
+                retryable: true,
+            });
         }
 
         let anthropic_response: AnthropicResponse = response.json().await?;
-        
+
         // Extract text content and tool calls
         let mut text_parts = Vec::new();
         let mut tool_calls = Vec::new();
-        
+
         for content in anthropic_response.content {
             match content.content_type.as_str() {
                 "text" => {
                     if let Some(text) = content.text {
                         text_parts.push(text);
                     }
-                },
+                }
                 "tool_use" => {
-                    if let (Some(id), Some(name), Some(input)) = (content.id, content.name, content.input) {
+                    if let (Some(id), Some(name), Some(input)) =
+                        (content.id, content.name, content.input)
+                    {
                         tool_calls.push(ToolCall {
                             id,
                             r#type: ToolType::Function,
@@ -205,17 +219,17 @@ impl CompletionProvider for AnthropicProvider {
                             },
                         });
                     }
-                },
-                _ => {},
+                }
+                _ => {}
             }
         }
-        
+
         let message_content = if text_parts.is_empty() {
             MessageContent::Text("".to_string())
         } else {
             MessageContent::Text(text_parts.join(""))
         };
-        
+
         Ok(CompletionResponse {
             id: anthropic_response.id,
             model: anthropic_response.model,
@@ -224,7 +238,11 @@ impl CompletionProvider for AnthropicProvider {
                 message: Message {
                     role: Role::Assistant,
                     content: message_content,
-                    tool_calls: if tool_calls.is_empty() { None } else { Some(tool_calls) },
+                    tool_calls: if tool_calls.is_empty() {
+                        None
+                    } else {
+                        Some(tool_calls)
+                    },
                     tool_call_id: None,
                 },
                 finish_reason: Some("stop".to_string()),
@@ -232,7 +250,8 @@ impl CompletionProvider for AnthropicProvider {
             usage: Some(Usage {
                 prompt_tokens: anthropic_response.usage.input_tokens,
                 completion_tokens: anthropic_response.usage.output_tokens,
-                total_tokens: anthropic_response.usage.input_tokens + anthropic_response.usage.output_tokens,
+                total_tokens: anthropic_response.usage.input_tokens
+                    + anthropic_response.usage.output_tokens,
             }),
         })
     }
@@ -242,16 +261,19 @@ impl CompletionProvider for AnthropicProvider {
         request: CompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamChunk>> + Send>>> {
         let (system, messages) = split_system_message(request.messages);
-        
+
         // Convert tools if present
         let tools = request.tools.map(|tools| {
-            tools.into_iter().map(|tool| AnthropicTool {
-                name: tool.function.name,
-                description: tool.function.description.unwrap_or_default(),
-                input_schema: tool.function.parameters,
-            }).collect()
+            tools
+                .into_iter()
+                .map(|tool| AnthropicTool {
+                    name: tool.function.name,
+                    description: tool.function.description.unwrap_or_default(),
+                    input_schema: tool.function.parameters,
+                })
+                .collect()
         });
-        
+
         // Convert tool choice if present
         let tool_choice = request.tool_choice.map(|tc| match tc {
             ToolChoice::String(s) => match s.as_str() {
@@ -263,10 +285,13 @@ impl CompletionProvider for AnthropicProvider {
                 name: obj.function.name,
             },
         });
-        
+
         let anthropic_request = AnthropicRequest {
             model: request.model,
-            messages: messages.into_iter().map(|m| convert_message_to_anthropic(m)).collect(),
+            messages: messages
+                .into_iter()
+                .map(|m| convert_message_to_anthropic(m))
+                .collect(),
             max_tokens: request.max_tokens.unwrap_or(1024),
             temperature: request.temperature,
             stream: Some(true),
@@ -275,7 +300,8 @@ impl CompletionProvider for AnthropicProvider {
             tool_choice,
         };
 
-        let response = self.client
+        let response = self
+            .client
             .post("https://api.anthropic.com/v1/messages")
             .header("X-API-Key", &self.api_key)
             .header("anthropic-version", "2024-10-22")
@@ -286,25 +312,33 @@ impl CompletionProvider for AnthropicProvider {
 
         if !response.status().is_success() {
             let error_text = response.text().await?;
-            return Err(AiError::ProviderError { provider: "anthropic".to_string(), message: format!("Anthropic API error: {}", error_text), error_code: None, retryable: true });
+            return Err(AiError::ProviderError {
+                provider: "anthropic".to_string(),
+                message: format!("Anthropic API error: {}", error_text),
+                error_code: None,
+                retryable: true,
+            });
         }
 
         let stream = response.bytes_stream();
-        let stream = stream.map(|result| {
-            match result {
+        let stream = stream
+            .map(|result| match result {
                 Ok(bytes) => {
                     let text = String::from_utf8_lossy(&bytes);
                     parse_anthropic_sse(&text)
                 }
-                Err(e) => Err(AiError::StreamError { message: e.to_string(), retryable: true }),
-            }
-        }).filter_map(|result| async move {
-            match result {
-                Ok(Some(chunk)) => Some(Ok(chunk)),
-                Ok(None) => None,
-                Err(e) => Some(Err(e)),
-            }
-        });
+                Err(e) => Err(AiError::StreamError {
+                    message: e.to_string(),
+                    retryable: true,
+                }),
+            })
+            .filter_map(|result| async move {
+                match result {
+                    Ok(Some(chunk)) => Some(Ok(chunk)),
+                    Ok(None) => None,
+                    Err(e) => Some(Err(e)),
+                }
+            });
 
         Ok(Box::pin(stream))
     }
@@ -332,52 +366,55 @@ fn convert_message_to_anthropic(msg: Message) -> AnthropicMessage {
     let content = match msg.content {
         MessageContent::Text(text) => AnthropicMessageContent::Text(text),
         MessageContent::Parts(parts) => AnthropicMessageContent::Parts(
-            parts.into_iter().map(|part| match part {
-                ContentPart::Text { text } => AnthropicContentPart {
-                    content_type: "text".to_string(),
-                    text: Some(text),
-                    source: None,
-                },
-                ContentPart::Image { image_url } => {
-                    // Anthropic expects base64 images
-                    if let Some(data_url) = image_url.url.strip_prefix("data:") {
-                        if let Some((media_type, data)) = data_url.split_once(";base64,") {
-                            AnthropicContentPart {
-                                content_type: "image".to_string(),
-                                text: None,
-                                source: Some(AnthropicImageSource {
-                                    source_type: "base64".to_string(),
-                                    media_type: media_type.to_string(),
-                                    data: data.to_string(),
-                                }),
+            parts
+                .into_iter()
+                .map(|part| match part {
+                    ContentPart::Text { text } => AnthropicContentPart {
+                        content_type: "text".to_string(),
+                        text: Some(text),
+                        source: None,
+                    },
+                    ContentPart::Image { image_url } => {
+                        // Anthropic expects base64 images
+                        if let Some(data_url) = image_url.url.strip_prefix("data:") {
+                            if let Some((media_type, data)) = data_url.split_once(";base64,") {
+                                AnthropicContentPart {
+                                    content_type: "image".to_string(),
+                                    text: None,
+                                    source: Some(AnthropicImageSource {
+                                        source_type: "base64".to_string(),
+                                        media_type: media_type.to_string(),
+                                        data: data.to_string(),
+                                    }),
+                                }
+                            } else {
+                                // Fallback to text if not base64
+                                AnthropicContentPart {
+                                    content_type: "text".to_string(),
+                                    text: Some(format!("[Image: {}]", image_url.url)),
+                                    source: None,
+                                }
                             }
                         } else {
-                            // Fallback to text if not base64
+                            // URL images not supported by Anthropic, convert to text
                             AnthropicContentPart {
                                 content_type: "text".to_string(),
                                 text: Some(format!("[Image: {}]", image_url.url)),
                                 source: None,
                             }
                         }
-                    } else {
-                        // URL images not supported by Anthropic, convert to text
-                        AnthropicContentPart {
-                            content_type: "text".to_string(),
-                            text: Some(format!("[Image: {}]", image_url.url)),
-                            source: None,
-                        }
                     }
-                },
-            }).collect()
+                })
+                .collect(),
         ),
     };
-    
+
     AnthropicMessage {
         role: match msg.role {
             Role::User => "user".to_string(),
             Role::Assistant => "assistant".to_string(),
             Role::System => "user".to_string(), // Anthropic doesn't have system role
-            Role::Tool => "user".to_string(), // Tool results are sent as user messages
+            Role::Tool => "user".to_string(),   // Tool results are sent as user messages
         },
         content,
     }
@@ -386,35 +423,38 @@ fn convert_message_to_anthropic(msg: Message) -> AnthropicMessage {
 fn extract_text_from_content(content: &MessageContent) -> String {
     match content {
         MessageContent::Text(s) => s.clone(),
-        MessageContent::Parts(parts) => {
-            parts.iter()
-                .filter_map(|p| match p {
-                    ContentPart::Text { text } => Some(text.clone()),
-                    _ => None,
-                })
-                .collect::<Vec<_>>()
-                .join(" ")
-        }
+        MessageContent::Parts(parts) => parts
+            .iter()
+            .filter_map(|p| match p {
+                ContentPart::Text { text } => Some(text.clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .join(" "),
     }
 }
 
 fn split_system_message(messages: Vec<Message>) -> (Option<String>, Vec<Message>) {
     let mut system = None;
     let mut other_messages = Vec::new();
-    
+
     for message in messages {
         match message.role {
             Role::System => {
                 if system.is_none() {
                     system = Some(extract_text_from_content(&message.content));
                 } else {
-                    system = Some(format!("{}\n\n{}", system.unwrap(), extract_text_from_content(&message.content)));
+                    system = Some(format!(
+                        "{}\n\n{}",
+                        system.unwrap(),
+                        extract_text_from_content(&message.content)
+                    ));
                 }
             }
             _ => other_messages.push(message),
         }
     }
-    
+
     (system, other_messages)
 }
 
@@ -422,7 +462,7 @@ fn parse_anthropic_sse(data: &str) -> Result<Option<StreamChunk>> {
     for line in data.lines() {
         if line.starts_with("event: ") {
             let event_type = &line[7..];
-            
+
             // Find the corresponding data line
             if let Some(data_line) = data.lines().find(|l| l.starts_with("data: ")) {
                 let json_str = &data_line[6..];
@@ -446,14 +486,16 @@ fn parse_anthropic_sse(data: &str) -> Result<Option<StreamChunk>> {
                                     }));
                                 }
                             }
-                        },
+                        }
                         "content_block_start" => {
                             if let Some(content_block) = json.get("content_block") {
-                                if content_block.get("type").and_then(|t| t.as_str()) == Some("tool_use") {
+                                if content_block.get("type").and_then(|t| t.as_str())
+                                    == Some("tool_use")
+                                {
                                     // Handle tool call start
                                     if let (Some(id), Some(name)) = (
                                         content_block.get("id").and_then(|i| i.as_str()),
-                                        content_block.get("name").and_then(|n| n.as_str())
+                                        content_block.get("name").and_then(|n| n.as_str()),
                                     ) {
                                         return Ok(Some(StreamChunk {
                                             id: "stream".to_string(),
@@ -479,8 +521,8 @@ fn parse_anthropic_sse(data: &str) -> Result<Option<StreamChunk>> {
                                     }
                                 }
                             }
-                        },
-                        _ => {},
+                        }
+                        _ => {}
                     }
                 }
             }

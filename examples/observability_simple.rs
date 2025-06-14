@@ -1,13 +1,11 @@
+use lib_ai::{
+    agent::tools::CalculatorTool,
+    agent::AgentBuilder,
+    observability::{tracing::TracingConfig, AgentTracer, CostTracker, MetricsCollector},
+    CompletionProvider,
+};
 use std::sync::Arc;
 use std::time::Duration;
-use lib_ai::{
-    agent::AgentBuilder, CompletionProvider,
-    observability::{
-        MetricsCollector, AgentTracer, CostTracker,
-        tracing::TracingConfig,
-    },
-    agent::tools::CalculatorTool,
-};
 
 struct MockProvider;
 
@@ -25,9 +23,12 @@ impl CompletionProvider for MockProvider {
         vec!["mock-model"]
     }
 
-    async fn complete(&self, request: lib_ai::CompletionRequest) -> Result<lib_ai::CompletionResponse, lib_ai::AiError> {
-        use lib_ai::{CompletionResponse, Choice, Message, MessageContent, Role, Usage};
-        
+    async fn complete(
+        &self,
+        request: lib_ai::CompletionRequest,
+    ) -> Result<lib_ai::CompletionResponse, lib_ai::AiError> {
+        use lib_ai::{Choice, CompletionResponse, Message, MessageContent, Role, Usage};
+
         // Simulate a response
         Ok(CompletionResponse {
             id: "mock-response".to_string(),
@@ -36,7 +37,9 @@ impl CompletionProvider for MockProvider {
                 index: 0,
                 message: Message {
                     role: Role::Assistant,
-                    content: MessageContent::text("This is a mock response for observability testing"),
+                    content: MessageContent::text(
+                        "This is a mock response for observability testing",
+                    ),
                     tool_calls: None,
                     tool_call_id: None,
                 },
@@ -54,7 +57,9 @@ impl CompletionProvider for MockProvider {
         &self,
         _request: lib_ai::CompletionRequest,
     ) -> Result<
-        std::pin::Pin<Box<dyn futures::Stream<Item = Result<lib_ai::StreamChunk, lib_ai::AiError>> + Send>>,
+        std::pin::Pin<
+            Box<dyn futures::Stream<Item = Result<lib_ai::StreamChunk, lib_ai::AiError>> + Send>,
+        >,
         lib_ai::AiError,
     > {
         use futures::stream;
@@ -92,19 +97,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("🚀 Agent created with observability");
     println!("Agent ID: {}", agent.agent_id());
-    
+
     // Perform some operations to generate metrics and traces
     println!("\n📊 Executing agent tasks...");
-    
-    let tasks = vec![
-        "Hello, how are you?",
-        "What is 2 + 2?",
-        "Tell me about AI",
-    ];
-    
+
+    let tasks = vec!["Hello, how are you?", "What is 2 + 2?", "Tell me about AI"];
+
     for (i, task) in tasks.iter().enumerate() {
         println!("\nTask {}: {}", i + 1, task);
-        
+
         match agent.execute(task).await {
             Ok(response) => {
                 println!("✅ Response: {}", response);
@@ -113,7 +114,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("❌ Error: {}", e);
             }
         }
-        
+
         // Small delay between requests
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
@@ -121,49 +122,64 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Display collected metrics
     println!("\n📈 Collected Metrics:");
     println!("===================");
-    
+
     if let Some(metrics) = metrics_collector.get_agent_metrics(agent.agent_id()) {
         println!("Agent: {}", agent.agent_id());
         println!("  Total Requests: {}", metrics.total_requests);
         println!("  Successful Requests: {}", metrics.successful_requests);
         println!("  Failed Requests: {}", metrics.failed_requests);
-        println!("  Success Rate: {:.2}%", 
+        println!(
+            "  Success Rate: {:.2}%",
             if metrics.total_requests > 0 {
                 (metrics.successful_requests as f64 / metrics.total_requests as f64) * 100.0
             } else {
                 0.0
             }
         );
-        println!("  Average Response Time: {:.2}ms", metrics.average_response_time.as_millis());
-        println!("  Total Input Tokens: {}", metrics.total_tokens.input_tokens);
-        println!("  Total Output Tokens: {}", metrics.total_tokens.output_tokens);
+        println!(
+            "  Average Response Time: {:.2}ms",
+            metrics.average_response_time.as_millis()
+        );
+        println!(
+            "  Total Input Tokens: {}",
+            metrics.total_tokens.input_tokens
+        );
+        println!(
+            "  Total Output Tokens: {}",
+            metrics.total_tokens.output_tokens
+        );
         println!("  Total Cost: ${:.6}", metrics.total_cost);
     }
-    
+
     // Display global metrics
     let global_metrics = metrics_collector.get_global_metrics();
     println!("\n🌍 Global Metrics:");
     println!("  Total Agents: {}", global_metrics.total_agents);
     println!("  Total Requests: {}", global_metrics.total_requests);
-    println!("  Total Input Tokens: {}", global_metrics.total_tokens.input_tokens);
-    println!("  Total Output Tokens: {}", global_metrics.total_tokens.output_tokens);
+    println!(
+        "  Total Input Tokens: {}",
+        global_metrics.total_tokens.input_tokens
+    );
+    println!(
+        "  Total Output Tokens: {}",
+        global_metrics.total_tokens.output_tokens
+    );
     println!("  Total Cost: ${:.6}", global_metrics.total_cost);
 
     // Display cost breakdown
     println!("\n💰 Cost Breakdown:");
     println!("==================");
-    
+
     if let Ok(cost_tracker_guard) = cost_tracker.read() {
         let report = cost_tracker_guard.generate_report();
         println!("Total Cost: ${:.6}", report.total_cost);
-        
+
         for provider in &report.providers {
             println!("  {}: ${:.6}", provider.provider_name, provider.total_cost);
             for model in &provider.models {
-                println!("    {}: ${:.6} ({} requests)", 
-                    model.model_name, 
-                    model.total_cost,
-                    model.requests
+                println!(
+                    "    {}: ${:.6} ({} requests)",
+                    model.model_name, model.total_cost, model.requests
                 );
             }
         }
@@ -172,20 +188,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Display trace information
     println!("\n🔍 Trace Information:");
     println!("=====================");
-    
+
     let all_traces = tracer.get_all_traces();
     println!("Total Traces: {}", all_traces.len());
-    
+
     for (i, (trace_id, events)) in all_traces.iter().take(3).enumerate() {
-        println!("Trace {}: {} ({} events)", 
-            i + 1, 
-            trace_id,
-            events.len()
-        );
-        
+        println!("Trace {}: {} ({} events)", i + 1, trace_id, events.len());
+
         for event in events.iter().take(2) {
-            println!("  - {}: {}ms", 
-                event.operation_name, 
+            println!(
+                "  - {}: {}ms",
+                event.operation_name,
                 event.duration.map_or(0, |d| d.as_millis())
             );
         }

@@ -1,9 +1,9 @@
-pub mod provider;
-pub mod openai;
 pub mod local;
 pub mod models;
+pub mod openai;
+pub mod provider;
 
-pub use provider::{EmbeddingProvider, EmbeddingError};
-pub use models::{Embedding, EmbeddingRequest, EmbeddingResponse};
-pub use openai::{OpenAIEmbeddingProvider, OpenAIEmbeddingModel};
 pub use local::{LocalEmbeddingProvider, MockEmbeddingProvider};
+pub use models::{Embedding, EmbeddingRequest, EmbeddingResponse};
+pub use openai::{OpenAIEmbeddingModel, OpenAIEmbeddingProvider};
+pub use provider::{EmbeddingError, EmbeddingProvider};

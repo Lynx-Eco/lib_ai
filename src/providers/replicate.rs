@@ -1,16 +1,16 @@
 use async_trait::async_trait;
+use futures::stream::Stream;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use futures::stream::Stream;
-use std::pin::Pin;
 use std::env;
+use std::pin::Pin;
 use std::time::Duration;
 use tokio::time::sleep;
 
 use crate::{
-    CompletionProvider, CompletionRequest, CompletionResponse, StreamChunk,
-    Message, MessageContent, Role, Choice, AiError, Result,
+    AiError, Choice, CompletionProvider, CompletionRequest, CompletionResponse, Message,
+    MessageContent, Result, Role, StreamChunk,
 };
 
 /// Replicate provider for open-source models
@@ -21,7 +21,7 @@ pub struct ReplicateProvider {
 
 impl ReplicateProvider {
     /// Create a new Replicate provider
-    /// 
+    ///
     /// # Arguments
     /// * `api_key` - Optional API key. If not provided, will look for REPLICATE_API_TOKEN env var
     pub fn new(api_key: Option<String>) -> Result<Self> {
@@ -43,16 +43,27 @@ impl ReplicateProvider {
         // For now, we'll use a mapping of known models to their versions
         // In a production system, you'd want to fetch this from the Replicate API
         let version = match model {
-            "meta/llama-2-70b-chat" => "02e509c789964a7ea8736978a43525956ef40397be9033abf9fd2badfe68c9e3",
-            "meta/llama-2-13b-chat" => "f4e2de70d66816a838a89eeeb621910adffb0dd0baba3976c96980970978018d",
-            "meta/llama-2-7b-chat" => "13c3cdee13ee059ab779f0291d29054dab00a47dad8261375654de5540165fb0",
-            "mistralai/mistral-7b-instruct-v0.2" => "6282abe8f29b89d2b27b8a36a215b2f529459ee712ba9c5e44bdc96ca35b9cdc",
-            "stability-ai/sdxl" => "39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b",
+            "meta/llama-2-70b-chat" => {
+                "02e509c789964a7ea8736978a43525956ef40397be9033abf9fd2badfe68c9e3"
+            }
+            "meta/llama-2-13b-chat" => {
+                "f4e2de70d66816a838a89eeeb621910adffb0dd0baba3976c96980970978018d"
+            }
+            "meta/llama-2-7b-chat" => {
+                "13c3cdee13ee059ab779f0291d29054dab00a47dad8261375654de5540165fb0"
+            }
+            "mistralai/mistral-7b-instruct-v0.2" => {
+                "6282abe8f29b89d2b27b8a36a215b2f529459ee712ba9c5e44bdc96ca35b9cdc"
+            }
+            "stability-ai/sdxl" => {
+                "39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b"
+            }
             _ => {
                 // Try to use the model string as-is (might be a full version ID)
                 model
             }
-        }.to_string();
+        }
+        .to_string();
 
         Ok(version)
     }
@@ -60,19 +71,18 @@ impl ReplicateProvider {
     /// Format messages for Replicate models
     fn format_prompt(&self, messages: &[Message]) -> String {
         let mut prompt = String::new();
-        
+
         for message in messages {
             let content = match &message.content {
                 MessageContent::Text(text) => text.clone(),
-                MessageContent::Parts(parts) => {
-                    parts.iter()
-                        .filter_map(|part| match part {
-                            crate::ContentPart::Text { text } => Some(text.clone()),
-                            _ => None,
-                        })
-                        .collect::<Vec<_>>()
-                        .join(" ")
-                }
+                MessageContent::Parts(parts) => parts
+                    .iter()
+                    .filter_map(|part| match part {
+                        crate::ContentPart::Text { text } => Some(text.clone()),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" "),
             };
 
             match message.role {
@@ -90,19 +100,20 @@ impl ReplicateProvider {
                 }
             }
         }
-        
+
         // Add the assistant prompt to get a response
         prompt.push_str("Assistant: ");
-        
+
         prompt
     }
 
     /// Wait for a prediction to complete
     async fn wait_for_prediction(&self, prediction_url: &str) -> Result<ReplicatePrediction> {
         let max_attempts = 300; // 5 minutes with 1 second intervals
-        
+
         for _ in 0..max_attempts {
-            let response = self.client
+            let response = self
+                .client
                 .get(prediction_url)
                 .header("Authorization", format!("Token {}", self.api_key))
                 .send()
@@ -119,14 +130,19 @@ impl ReplicateProvider {
             }
 
             let prediction: ReplicatePrediction = response.json().await?;
-            
+
             match prediction.status.as_str() {
                 "succeeded" => return Ok(prediction),
                 "failed" | "canceled" => {
                     return Err(AiError::ProviderError {
                         provider: "replicate".to_string(),
-                        message: format!("Prediction {}: {}", prediction.status, 
-                            prediction.error.unwrap_or_else(|| "Unknown error".to_string())),
+                        message: format!(
+                            "Prediction {}: {}",
+                            prediction.status,
+                            prediction
+                                .error
+                                .unwrap_or_else(|| "Unknown error".to_string())
+                        ),
                         error_code: None,
                         retryable: false,
                     });
@@ -145,7 +161,7 @@ impl ReplicateProvider {
                 }
             }
         }
-        
+
         Err(AiError::TimeoutError {
             timeout: Duration::from_secs(300),
             retryable: false,
@@ -157,30 +173,30 @@ impl ReplicateProvider {
 impl CompletionProvider for ReplicateProvider {
     async fn complete(&self, request: CompletionRequest) -> Result<CompletionResponse> {
         let url = "https://api.replicate.com/v1/predictions";
-        
+
         // Get the model version
         let version = self.get_model_version(&request.model).await?;
-        
+
         // Format the prompt
         let prompt = self.format_prompt(&request.messages);
-        
+
         // Build the input parameters
         let mut input = serde_json::json!({
             "prompt": prompt,
         });
-        
+
         if let Some(temp) = request.temperature {
             input["temperature"] = serde_json::json!(temp);
         }
-        
+
         if let Some(max_tokens) = request.max_tokens {
             input["max_new_tokens"] = serde_json::json!(max_tokens);
         }
-        
+
         if let Some(top_p) = request.top_p {
             input["top_p"] = serde_json::json!(top_p);
         }
-        
+
         if let Some(stop) = &request.stop {
             input["stop_sequences"] = serde_json::json!(stop.join(","));
         }
@@ -193,7 +209,8 @@ impl CompletionProvider for ReplicateProvider {
         };
 
         // Create the prediction
-        let response = self.client
+        let response = self
+            .client
             .post(url)
             .header("Authorization", format!("Token {}", self.api_key))
             .header("Content-Type", "application/json")
@@ -213,10 +230,10 @@ impl CompletionProvider for ReplicateProvider {
         }
 
         let prediction: ReplicatePrediction = response.json().await?;
-        
+
         // Wait for the prediction to complete
         let completed_prediction = self.wait_for_prediction(&prediction.urls.get).await?;
-        
+
         // Extract the output
         let output_text = match &completed_prediction.output {
             Some(Value::String(s)) => s.clone(),
@@ -254,11 +271,14 @@ impl CompletionProvider for ReplicateProvider {
         // Replicate doesn't support true streaming for language models
         // We'll simulate it by getting the full response and streaming it back
         let response = self.complete(request).await?;
-        
-        let text = response.choices[0].message.content.as_text()
+
+        let text = response.choices[0]
+            .message
+            .content
+            .as_text()
             .unwrap_or("")
             .to_string();
-        
+
         // Split the text into chunks
         let chunks: Vec<String> = text
             .chars()
@@ -266,34 +286,40 @@ impl CompletionProvider for ReplicateProvider {
             .chunks(10) // Stream 10 characters at a time
             .map(|chunk| chunk.iter().collect::<String>())
             .collect();
-        
-        let stream = futures::stream::iter(chunks.into_iter().enumerate().map(|(i, chunk)| {
-            Ok(StreamChunk {
-                id: "replicate_stream".to_string(),
-                choices: vec![crate::StreamChoice {
-                    index: 0,
-                    delta: crate::Delta {
-                        role: if i == 0 { Some(Role::Assistant) } else { None },
-                        content: Some(chunk),
-                        tool_calls: None,
-                    },
-                    finish_reason: None,
-                }],
-                model: None,
-            })
-        }).chain(std::iter::once(Ok(StreamChunk {
-            id: "replicate_stream".to_string(),
-            choices: vec![crate::StreamChoice {
-                index: 0,
-                delta: crate::Delta {
-                    role: None,
-                    content: None,
-                    tool_calls: None,
-                },
-                finish_reason: Some("stop".to_string()),
-            }],
-            model: None,
-        }))));
+
+        let stream = futures::stream::iter(
+            chunks
+                .into_iter()
+                .enumerate()
+                .map(|(i, chunk)| {
+                    Ok(StreamChunk {
+                        id: "replicate_stream".to_string(),
+                        choices: vec![crate::StreamChoice {
+                            index: 0,
+                            delta: crate::Delta {
+                                role: if i == 0 { Some(Role::Assistant) } else { None },
+                                content: Some(chunk),
+                                tool_calls: None,
+                            },
+                            finish_reason: None,
+                        }],
+                        model: None,
+                    })
+                })
+                .chain(std::iter::once(Ok(StreamChunk {
+                    id: "replicate_stream".to_string(),
+                    choices: vec![crate::StreamChoice {
+                        index: 0,
+                        delta: crate::Delta {
+                            role: None,
+                            content: None,
+                            tool_calls: None,
+                        },
+                        finish_reason: Some("stop".to_string()),
+                    }],
+                    model: None,
+                }))),
+        );
 
         Ok(Box::pin(stream))
     }
@@ -355,7 +381,7 @@ mod tests {
     fn test_replicate_provider_creation() {
         let result = ReplicateProvider::new(Some("test-token".to_string()));
         assert!(result.is_ok());
-        
+
         let provider = result.unwrap();
         assert_eq!(provider.name(), "replicate");
         assert_eq!(provider.default_model(), "meta/llama-2-70b-chat");
@@ -364,7 +390,7 @@ mod tests {
     #[test]
     fn test_prompt_formatting() {
         let provider = ReplicateProvider::new(Some("test-token".to_string())).unwrap();
-        
+
         let messages = vec![
             Message {
                 role: Role::System,
@@ -379,8 +405,11 @@ mod tests {
                 tool_call_id: None,
             },
         ];
-        
+
         let prompt = provider.format_prompt(&messages);
-        assert_eq!(prompt, "System: You are helpful\n\nHuman: Hello\n\nAssistant: ");
+        assert_eq!(
+            prompt,
+            "System: You are helpful\n\nHuman: Hello\n\nAssistant: "
+        );
     }
 }

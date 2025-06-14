@@ -1,13 +1,13 @@
 use async_trait::async_trait;
-use serde::{ Deserialize, Serialize };
-use surrealdb::engine::remote::ws::{ Client, Ws };
-use surrealdb::Surreal;
-use surrealdb::RecordId;
+use serde::{Deserialize, Serialize};
+use surrealdb::engine::remote::ws::{Client, Ws};
 use surrealdb::sql::Datetime;
+use surrealdb::RecordId;
+use surrealdb::Surreal;
 
-use crate::embeddings::{ EmbeddingProvider, Embedding };
+use super::base::{Memory, MemoryStats};
 use crate::agent::AgentError;
-use super::base::{ Memory, MemoryStats };
+use crate::embeddings::{Embedding, EmbeddingProvider};
 
 /// A memory entry stored in SurrealDB
 #[derive(Debug, Serialize, Deserialize)]
@@ -55,29 +55,26 @@ impl SurrealMemoryStore {
     /// Create a new SurrealDB memory store
     pub async fn new(
         config: SurrealMemoryConfig,
-        embedding_provider: Box<dyn EmbeddingProvider>
+        embedding_provider: Box<dyn EmbeddingProvider>,
     ) -> Result<Self, AgentError> {
-        let db = Surreal::new::<Ws>(&config.url).await.map_err(|e|
+        let db = Surreal::new::<Ws>(&config.url).await.map_err(|e| {
             AgentError::MemoryError(format!("Failed to connect to SurrealDB: {}", e))
-        )?;
+        })?;
 
         // Authenticate if credentials provided
         if let (Some(username), Some(password)) = (&config.username, &config.password) {
-            db
-                .signin(surrealdb::opt::auth::Root {
-                    username,
-                    password,
-                }).await
+            db.signin(surrealdb::opt::auth::Root { username, password })
+                .await
                 .map_err(|e| AgentError::MemoryError(format!("Failed to authenticate: {}", e)))?;
         }
 
         // Select namespace and database
-        db
-            .use_ns(&config.namespace)
-            .use_db(&config.database).await
-            .map_err(|e|
+        db.use_ns(&config.namespace)
+            .use_db(&config.database)
+            .await
+            .map_err(|e| {
                 AgentError::MemoryError(format!("Failed to select namespace/database: {}", e))
-            )?;
+            })?;
 
         // Create table and indexes if they don't exist
         let create_table_query = format!(
@@ -99,8 +96,8 @@ impl SurrealMemoryStore {
             config.table
         );
 
-        db
-            .query(&create_table_query).await
+        db.query(&create_table_query)
+            .await
             .map_err(|e| AgentError::MemoryError(format!("Failed to create table: {}", e)))?;
 
         Ok(Self {
@@ -115,7 +112,7 @@ impl SurrealMemoryStore {
         &self,
         embedding: &[f32],
         limit: usize,
-        threshold: f32
+        threshold: f32,
     ) -> Result<Vec<MemoryRecord>, AgentError> {
         // SurrealDB doesn't have built-in vector similarity yet, so we'll fetch all and compute in-memory
         // In production, you'd want to use a vector database or add vector search to SurrealDB
@@ -125,8 +122,10 @@ impl SurrealMemoryStore {
             self.config.table
         );
 
-        let mut response = self.db
-            .query(&query).await
+        let mut response = self
+            .db
+            .query(&query)
+            .await
             .map_err(|e| AgentError::MemoryError(format!("Failed to query memories: {}", e)))?;
 
         let records: Vec<MemoryRecord> = response
@@ -170,8 +169,10 @@ impl SurrealMemoryStore {
 impl Memory for SurrealMemoryStore {
     async fn store(&mut self, input: &str, output: &str) -> Result<(), AgentError> {
         // Generate embedding for the input
-        let embedding = self.embedding_provider
-            .embed_single(input).await
+        let embedding = self
+            .embedding_provider
+            .embed_single(input)
+            .await
             .map_err(|e| AgentError::MemoryError(format!("Failed to generate embedding: {}", e)))?;
 
         let record = MemoryRecord {
@@ -187,7 +188,8 @@ impl Memory for SurrealMemoryStore {
 
         self.db
             .query(&query)
-            .bind(("content", record)).await
+            .bind(("content", record))
+            .await
             .map_err(|e| AgentError::MemoryError(format!("Failed to store memory: {}", e)))?;
 
         Ok(())
@@ -195,11 +197,13 @@ impl Memory for SurrealMemoryStore {
 
     async fn retrieve(&self, query: &str, limit: usize) -> Result<Vec<String>, AgentError> {
         // Generate embedding for the query
-        let embedding = self.embedding_provider
-            .embed_single(query).await
-            .map_err(|e|
+        let embedding = self
+            .embedding_provider
+            .embed_single(query)
+            .await
+            .map_err(|e| {
                 AgentError::MemoryError(format!("Failed to generate query embedding: {}", e))
-            )?;
+            })?;
 
         // Find similar memories
         let similar_memories = self.find_similar(&embedding.vector, limit, 0.7).await?;
@@ -207,7 +211,7 @@ impl Memory for SurrealMemoryStore {
         // Format results
         let results = similar_memories
             .into_iter()
-            .map(|record| { format!("User: {}\nAssistant: {}", record.input, record.output) })
+            .map(|record| format!("User: {}\nAssistant: {}", record.input, record.output))
             .collect();
 
         Ok(results)
@@ -217,7 +221,8 @@ impl Memory for SurrealMemoryStore {
         let query = format!("DELETE {}", self.config.table);
 
         self.db
-            .query(&query).await
+            .query(&query)
+            .await
             .map_err(|e| AgentError::MemoryError(format!("Failed to clear memories: {}", e)))?;
 
         Ok(())
@@ -226,8 +231,10 @@ impl Memory for SurrealMemoryStore {
     async fn stats(&self) -> Result<MemoryStats, AgentError> {
         let count_query = format!("SELECT count() FROM {} GROUP ALL", self.config.table);
 
-        let mut response = self.db
-            .query(&count_query).await
+        let mut response = self
+            .db
+            .query(&count_query)
+            .await
             .map_err(|e| AgentError::MemoryError(format!("Failed to get stats: {}", e)))?;
 
         let count_result: Option<serde_json::Value> = response
@@ -299,9 +306,9 @@ impl SurrealMemoryBuilder {
     }
 
     pub async fn build(self) -> Result<SurrealMemoryStore, AgentError> {
-        let embedding_provider = self.embedding_provider.ok_or_else(||
-            AgentError::ConfigError("Embedding provider is required".to_string())
-        )?;
+        let embedding_provider = self
+            .embedding_provider
+            .ok_or_else(|| AgentError::ConfigError("Embedding provider is required".to_string()))?;
 
         SurrealMemoryStore::new(self.config, embedding_provider).await
     }

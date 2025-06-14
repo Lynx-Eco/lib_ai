@@ -2,7 +2,10 @@ use async_trait::async_trait;
 use futures::stream::Stream;
 use std::pin::Pin;
 
-use crate::{CompletionProvider, CompletionRequest, CompletionResponse, StreamChunk, Result, providers::openai::OpenAIProvider};
+use crate::{
+    providers::openai::OpenAIProvider, CompletionProvider, CompletionRequest, CompletionResponse,
+    Result, StreamChunk,
+};
 
 pub struct XAIProvider {
     openai_provider: OpenAIProvider,
@@ -13,7 +16,7 @@ impl XAIProvider {
         Self {
             openai_provider: OpenAIProvider::with_base_url(
                 api_key,
-                "https://api.x.ai/v1".to_string()
+                "https://api.x.ai/v1".to_string(),
             ),
         }
     }
@@ -41,10 +44,6 @@ impl CompletionProvider for XAIProvider {
     }
 
     fn available_models(&self) -> Vec<&'static str> {
-        vec![
-            "grok-2-latest",
-            "grok-2-1212",
-            "grok-beta",
-        ]
+        vec!["grok-2-latest", "grok-2-1212", "grok-beta"]
     }
 }

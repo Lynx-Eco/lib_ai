@@ -1,6 +1,6 @@
 use lib_ai::{
-    providers::*, CompletionProvider, CompletionRequest, Message, Role, MessageContent,
-    Tool, ToolType, ToolFunction, ToolChoice,
+    providers::*, CompletionProvider, CompletionRequest, Message, MessageContent, Role, Tool,
+    ToolChoice, ToolFunction, ToolType,
 };
 use serde_json::json;
 use tokio;
@@ -10,7 +10,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv::dotenv().ok();
     let api_key = std::env::var("OPENAI_API_KEY")?;
     let provider = OpenAIProvider::new(api_key);
-    
+
     // Define a weather tool
     let weather_tool = Tool {
         r#type: ToolType::Function,
@@ -34,18 +34,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }),
         },
     };
-    
+
     // Make a request with tools
     let request = CompletionRequest {
         model: provider.default_model().to_string(),
-        messages: vec![
-            Message {
-                role: Role::User,
-                content: MessageContent::text("What's the weather like in San Francisco?"),
-                tool_calls: None,
-                tool_call_id: None,
-            },
-        ],
+        messages: vec![Message {
+            role: Role::User,
+            content: MessageContent::text("What's the weather like in San Francisco?"),
+            tool_calls: None,
+            tool_call_id: None,
+        }],
         temperature: Some(0.7),
         max_tokens: Some(150),
         stream: Some(false),
@@ -58,15 +56,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         response_format: None,
         json_schema: None,
     };
-    
+
     let response = provider.complete(request).await?;
-    
+
     println!("Model: {}", response.model);
     for choice in response.choices {
         if let Some(text) = choice.message.content.as_text() {
             println!("Response: {}", text);
         }
-        
+
         if let Some(tool_calls) = choice.message.tool_calls {
             for tool_call in tool_calls {
                 println!("Tool Call ID: {}", tool_call.id);
@@ -75,6 +73,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
-    
+
     Ok(())
 }

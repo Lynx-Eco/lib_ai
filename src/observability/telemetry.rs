@@ -1,11 +1,11 @@
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
-use chrono::{DateTime, Utc};
 
-use super::{MetricsCollector, AgentTracer, CostTracker};
+use super::{AgentTracer, CostTracker, MetricsCollector};
 
 /// Configuration for telemetry export
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,11 +29,22 @@ pub struct ExporterConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ExporterType {
     Console,
-    File { path: String },
-    Http { endpoint: String, format: HttpFormat },
-    Jaeger { endpoint: String },
-    Prometheus { endpoint: String },
-    OpenTelemetry { endpoint: String },
+    File {
+        path: String,
+    },
+    Http {
+        endpoint: String,
+        format: HttpFormat,
+    },
+    Jaeger {
+        endpoint: String,
+    },
+    Prometheus {
+        endpoint: String,
+    },
+    OpenTelemetry {
+        endpoint: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -61,7 +72,7 @@ impl TelemetryExporter {
         cost_tracker: Arc<RwLock<CostTracker>>,
     ) -> Self {
         let mut exporters: Vec<Box<dyn Exporter>> = Vec::new();
-        
+
         for exporter_config in &config.exporters {
             if exporter_config.enabled {
                 match &exporter_config.exporter_type {
@@ -90,7 +101,7 @@ impl TelemetryExporter {
                 }
             }
         }
-        
+
         Self {
             config,
             metrics_collector,
@@ -100,27 +111,31 @@ impl TelemetryExporter {
             running: Arc::new(RwLock::new(false)),
         }
     }
-    
+
     pub async fn start(&self) {
         if !self.config.enabled {
             return;
         }
-        
+
         *self.running.write().await = true;
-        
+
         let metrics_collector = self.metrics_collector.clone();
         let tracer = self.tracer.clone();
         let cost_tracker = self.cost_tracker.clone();
-        let exporters = self.exporters.iter().map(|e| e.clone_box()).collect::<Vec<_>>();
+        let exporters = self
+            .exporters
+            .iter()
+            .map(|e| e.clone_box())
+            .collect::<Vec<_>>();
         let export_interval = self.config.export_interval;
         let running = self.running.clone();
-        
+
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(export_interval);
-            
+
             while *running.read().await {
                 interval.tick().await;
-                
+
                 // Collect all telemetry data
                 let telemetry_data = TelemetryData {
                     timestamp: Utc::now(),
@@ -131,7 +146,7 @@ impl TelemetryExporter {
                         serde_json::to_value(tracker.generate_report()).unwrap_or_default()
                     },
                 };
-                
+
                 // Export to all configured exporters
                 for exporter in &exporters {
                     if let Err(e) = exporter.export(&telemetry_data).await {
@@ -141,11 +156,11 @@ impl TelemetryExporter {
             }
         });
     }
-    
+
     pub async fn stop(&self) {
         *self.running.write().await = false;
     }
-    
+
     pub async fn export_now(&self) -> Result<(), Box<dyn std::error::Error>> {
         let telemetry_data = TelemetryData {
             timestamp: Utc::now(),
@@ -156,11 +171,11 @@ impl TelemetryExporter {
                 serde_json::to_value(tracker.generate_report())?
             },
         };
-        
+
         for exporter in &self.exporters {
             exporter.export(&telemetry_data).await?;
         }
-        
+
         Ok(())
     }
 }
@@ -198,7 +213,7 @@ impl Exporter for ConsoleExporter {
         println!("===============================\n");
         Ok(())
     }
-    
+
     fn clone_box(&self) -> Box<dyn Exporter> {
         Box::new(Self)
     }
@@ -220,20 +235,20 @@ impl Exporter for FileExporter {
     async fn export(&self, data: &TelemetryData) -> Result<(), Box<dyn std::error::Error>> {
         use tokio::fs::OpenOptions;
         use tokio::io::AsyncWriteExt;
-        
+
         let mut file = OpenOptions::new()
             .create(true)
             .append(true)
             .open(&self.file_path)
             .await?;
-        
+
         let json_line = serde_json::to_string(data)? + "\n";
         file.write_all(json_line.as_bytes()).await?;
         file.flush().await?;
-        
+
         Ok(())
     }
-    
+
     fn clone_box(&self) -> Box<dyn Exporter> {
         Box::new(Self {
             file_path: self.file_path.clone(),
@@ -264,12 +279,12 @@ impl HttpExporter {
 impl Exporter for HttpExporter {
     async fn export(&self, data: &TelemetryData) -> Result<(), Box<dyn std::error::Error>> {
         let mut request = self.client.post(&self.endpoint);
-        
+
         // Add headers
         for (key, value) in &self.headers {
             request = request.header(key, value);
         }
-        
+
         // Set content type and body based on format
         match self.format {
             HttpFormat::Json => {
@@ -291,16 +306,16 @@ impl Exporter for HttpExporter {
                     .json(data);
             }
         }
-        
+
         let response = request.send().await?;
-        
+
         if !response.status().is_success() {
             return Err(format!("HTTP export failed with status: {}", response.status()).into());
         }
-        
+
         Ok(())
     }
-    
+
     fn clone_box(&self) -> Box<dyn Exporter> {
         Box::new(Self {
             endpoint: self.endpoint.clone(),
@@ -335,21 +350,22 @@ impl Exporter for JaegerExporter {
             "data": [data.traces],
             "timestamp": data.timestamp
         });
-        
-        let response = self.client
+
+        let response = self
+            .client
             .post(format!("{}/api/traces", self.endpoint))
             .header("Content-Type", "application/json")
             .json(&jaeger_data)
             .send()
             .await?;
-        
+
         if !response.status().is_success() {
             return Err(format!("Jaeger export failed with status: {}", response.status()).into());
         }
-        
+
         Ok(())
     }
-    
+
     fn clone_box(&self) -> Box<dyn Exporter> {
         Box::new(Self {
             endpoint: self.endpoint.clone(),
@@ -379,21 +395,26 @@ impl Exporter for PrometheusExporter {
         // Convert metrics to Prometheus format
         // This is a simplified implementation
         let prometheus_data = self.convert_to_prometheus_format(&data.metrics)?;
-        
-        let response = self.client
+
+        let response = self
+            .client
             .post(format!("{}/api/v1/write", self.endpoint))
             .header("Content-Type", "application/x-protobuf")
             .body(prometheus_data)
             .send()
             .await?;
-        
+
         if !response.status().is_success() {
-            return Err(format!("Prometheus export failed with status: {}", response.status()).into());
+            return Err(format!(
+                "Prometheus export failed with status: {}",
+                response.status()
+            )
+            .into());
         }
-        
+
         Ok(())
     }
-    
+
     fn clone_box(&self) -> Box<dyn Exporter> {
         Box::new(Self {
             endpoint: self.endpoint.clone(),
@@ -403,7 +424,10 @@ impl Exporter for PrometheusExporter {
 }
 
 impl PrometheusExporter {
-    fn convert_to_prometheus_format(&self, _metrics: &serde_json::Value) -> Result<String, Box<dyn std::error::Error>> {
+    fn convert_to_prometheus_format(
+        &self,
+        _metrics: &serde_json::Value,
+    ) -> Result<String, Box<dyn std::error::Error>> {
         // This would convert our metrics to Prometheus text format
         // For now, return a placeholder
         Ok("# Prometheus metrics would go here\n".to_string())
@@ -434,21 +458,26 @@ impl Exporter for OpenTelemetryExporter {
             "resourceMetrics": data.metrics,
             "timestamp": data.timestamp
         });
-        
-        let response = self.client
+
+        let response = self
+            .client
             .post(format!("{}/v1/traces", self.endpoint))
             .header("Content-Type", "application/json")
             .json(&otel_data)
             .send()
             .await?;
-        
+
         if !response.status().is_success() {
-            return Err(format!("OpenTelemetry export failed with status: {}", response.status()).into());
+            return Err(format!(
+                "OpenTelemetry export failed with status: {}",
+                response.status()
+            )
+            .into());
         }
-        
+
         Ok(())
     }
-    
+
     fn clone_box(&self) -> Box<dyn Exporter> {
         Box::new(Self {
             endpoint: self.endpoint.clone(),
@@ -462,15 +491,13 @@ impl Default for TelemetryConfig {
         Self {
             enabled: false,
             export_interval: Duration::from_secs(60),
-            exporters: vec![
-                ExporterConfig {
-                    name: "console".to_string(),
-                    exporter_type: ExporterType::Console,
-                    endpoint: None,
-                    headers: HashMap::new(),
-                    enabled: false,
-                }
-            ],
+            exporters: vec![ExporterConfig {
+                name: "console".to_string(),
+                exporter_type: ExporterType::Console,
+                endpoint: None,
+                headers: HashMap::new(),
+                enabled: false,
+            }],
             batch_size: 100,
             max_queue_size: 1000,
         }

@@ -93,9 +93,9 @@ impl StructuredProvider for Order {
             schema: serde_json::json!({
                 "type": "object",
                 "properties": {
-                    "order_id": { 
-                        "type": "string", 
-                        "description": "Unique order identifier" 
+                    "order_id": {
+                        "type": "string",
+                        "description": "Unique order identifier"
                     },
                     "customer": {
                         "type": "object",
@@ -118,9 +118,9 @@ impl StructuredProvider for Order {
                             "required": ["product_id", "quantity", "price"]
                         }
                     },
-                    "total": { 
-                        "type": "number", 
-                        "description": "Total order amount" 
+                    "total": {
+                        "type": "number",
+                        "description": "Total order amount"
                     },
                     "status": {
                         "type": "string",
@@ -137,7 +137,7 @@ impl StructuredProvider for Order {
 fn main() {
     println!("Structured Output Schema Examples");
     println!("=================================\n");
-    
+
     // Example 1: Simple schema
     println!("1. Person Schema:");
     println!("-----------------");
@@ -146,15 +146,21 @@ fn main() {
     if let Some(desc) = &person_schema.description {
         println!("Description: {}", desc);
     }
-    println!("Schema: {}", serde_json::to_string_pretty(&person_schema.schema).unwrap());
-    
+    println!(
+        "Schema: {}",
+        serde_json::to_string_pretty(&person_schema.schema).unwrap()
+    );
+
     // Example 2: Product schema
     println!("\n\n2. Product Schema:");
     println!("------------------");
     let product_schema = Product::schema();
     println!("Name: {}", product_schema.name);
-    println!("Schema: {}", serde_json::to_string_pretty(&product_schema.schema).unwrap());
-    
+    println!(
+        "Schema: {}",
+        serde_json::to_string_pretty(&product_schema.schema).unwrap()
+    );
+
     // Example 3: Complex nested schema
     println!("\n\n3. Order Schema (nested):");
     println!("--------------------------");
@@ -163,19 +169,25 @@ fn main() {
     if let Some(desc) = &order_schema.description {
         println!("Description: {}", desc);
     }
-    println!("Schema: {}", serde_json::to_string_pretty(&order_schema.schema).unwrap());
-    
+    println!(
+        "Schema: {}",
+        serde_json::to_string_pretty(&order_schema.schema).unwrap()
+    );
+
     // Example 4: Demonstrate JSON validation
     println!("\n\n4. Example JSON that matches schemas:");
     println!("-------------------------------------");
-    
+
     let person_json = serde_json::json!({
         "name": "John Doe",
         "age": 30,
         "email": "john@example.com"
     });
-    println!("Valid Person JSON: {}", serde_json::to_string_pretty(&person_json).unwrap());
-    
+    println!(
+        "Valid Person JSON: {}",
+        serde_json::to_string_pretty(&person_json).unwrap()
+    );
+
     let order_json = serde_json::json!({
         "order_id": "ORD-12345",
         "customer": {
@@ -198,22 +210,25 @@ fn main() {
         "total": 109.97,
         "status": "processing"
     });
-    println!("\nValid Order JSON: {}", serde_json::to_string_pretty(&order_json).unwrap());
-    
+    println!(
+        "\nValid Order JSON: {}",
+        serde_json::to_string_pretty(&order_json).unwrap()
+    );
+
     // Example 5: Deserialize and validate
     println!("\n\n5. Deserialization Test:");
     println!("------------------------");
-    
+
     match serde_json::from_value::<Person>(person_json) {
         Ok(person) => println!("✓ Successfully deserialized Person: {:?}", person),
         Err(e) => println!("✗ Failed to deserialize Person: {}", e),
     }
-    
+
     match serde_json::from_value::<Order>(order_json) {
         Ok(order) => println!("✓ Successfully deserialized Order: {:?}", order),
         Err(e) => println!("✗ Failed to deserialize Order: {}", e),
     }
-    
+
     println!("\n\nNote: In a real agent, these schemas would be sent to the LLM");
     println!("to ensure structured, type-safe responses that can be parsed automatically.");
 }

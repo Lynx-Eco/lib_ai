@@ -1,13 +1,13 @@
 use async_trait::async_trait;
+use futures::stream::{Stream, StreamExt};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use futures::stream::{Stream, StreamExt};
-use std::pin::Pin;
 use std::env;
+use std::pin::Pin;
 
 use crate::{
-    CompletionProvider, CompletionRequest, CompletionResponse, StreamChunk,
-    Message, MessageContent, Role, Choice, Usage, AiError, Result,
+    AiError, Choice, CompletionProvider, CompletionRequest, CompletionResponse, Message,
+    MessageContent, Result, Role, StreamChunk, Usage,
 };
 
 /// Cohere provider for their AI models
@@ -18,7 +18,7 @@ pub struct CohereProvider {
 
 impl CohereProvider {
     /// Create a new Cohere provider
-    /// 
+    ///
     /// # Arguments
     /// * `api_key` - Optional API key. If not provided, will look for COHERE_API_KEY env var
     pub fn new(api_key: Option<String>) -> Result<Self> {
@@ -47,15 +47,14 @@ impl CohereProvider {
     fn convert_message(&self, message: &Message) -> CohereChatMessage {
         let message_text = match &message.content {
             MessageContent::Text(text) => text.clone(),
-            MessageContent::Parts(parts) => {
-                parts.iter()
-                    .filter_map(|part| match part {
-                        crate::ContentPart::Text { text } => Some(text.clone()),
-                        _ => None,
-                    })
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            }
+            MessageContent::Parts(parts) => parts
+                .iter()
+                .filter_map(|part| match part {
+                    crate::ContentPart::Text { text } => Some(text.clone()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+                .join(" "),
         };
 
         CohereChatMessage {
@@ -66,8 +65,13 @@ impl CohereProvider {
 
     fn convert_to_standard_response(&self, response: CohereChatResponse) -> CompletionResponse {
         CompletionResponse {
-            id: response.response_id.unwrap_or_else(|| "cohere_response".to_string()),
-            model: response.generation_info.map(|info| info.model).unwrap_or_else(|| "command".to_string()),
+            id: response
+                .response_id
+                .unwrap_or_else(|| "cohere_response".to_string()),
+            model: response
+                .generation_info
+                .map(|info| info.model)
+                .unwrap_or_else(|| "command".to_string()),
             choices: vec![Choice {
                 index: 0,
                 message: Message {
@@ -81,8 +85,9 @@ impl CohereProvider {
             usage: response.meta.map(|meta| Usage {
                 prompt_tokens: meta.billed_units.input_tokens.unwrap_or(0) as u32,
                 completion_tokens: meta.billed_units.output_tokens.unwrap_or(0) as u32,
-                total_tokens: (meta.billed_units.input_tokens.unwrap_or(0) + 
-                              meta.billed_units.output_tokens.unwrap_or(0)) as u32,
+                total_tokens: (meta.billed_units.input_tokens.unwrap_or(0)
+                    + meta.billed_units.output_tokens.unwrap_or(0))
+                    as u32,
             }),
         }
     }
@@ -92,12 +97,12 @@ impl CohereProvider {
 impl CompletionProvider for CohereProvider {
     async fn complete(&self, request: CompletionRequest) -> Result<CompletionResponse> {
         let url = "https://api.cohere.ai/v1/chat";
-        
+
         // Extract system message as preamble
         let (preamble, chat_history) = {
             let mut preamble = None;
             let mut history = Vec::new();
-            
+
             for msg in &request.messages {
                 match msg.role {
                     Role::System => {
@@ -109,12 +114,13 @@ impl CompletionProvider for CohereProvider {
                     _ => history.push(self.convert_message(msg)),
                 }
             }
-            
+
             (preamble, history)
         };
 
         // The last message should be from the user
-        let message = chat_history.last()
+        let message = chat_history
+            .last()
             .filter(|m| m.role == "USER")
             .map(|m| m.message.clone())
             .ok_or_else(|| AiError::InvalidRequest {
@@ -124,13 +130,17 @@ impl CompletionProvider for CohereProvider {
             })?;
 
         // Remove the last message from history
-        let chat_history = chat_history[..chat_history.len()-1].to_vec();
+        let chat_history = chat_history[..chat_history.len() - 1].to_vec();
 
         let cohere_request = CohereChatRequest {
             message,
             model: Some(request.model.clone()),
             preamble,
-            chat_history: if chat_history.is_empty() { None } else { Some(chat_history) },
+            chat_history: if chat_history.is_empty() {
+                None
+            } else {
+                Some(chat_history)
+            },
             temperature: request.temperature,
             max_tokens: request.max_tokens,
             p: request.top_p,
@@ -138,7 +148,8 @@ impl CompletionProvider for CohereProvider {
             stream: false,
         };
 
-        let response = self.client
+        let response = self
+            .client
             .post(url)
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("Content-Type", "application/json")
@@ -166,12 +177,12 @@ impl CompletionProvider for CohereProvider {
         request: CompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamChunk>> + Send>>> {
         let url = "https://api.cohere.ai/v1/chat";
-        
+
         // Extract system message as preamble
         let (preamble, chat_history) = {
             let mut preamble = None;
             let mut history = Vec::new();
-            
+
             for msg in &request.messages {
                 match msg.role {
                     Role::System => {
@@ -183,12 +194,13 @@ impl CompletionProvider for CohereProvider {
                     _ => history.push(self.convert_message(msg)),
                 }
             }
-            
+
             (preamble, history)
         };
 
         // The last message should be from the user
-        let message = chat_history.last()
+        let message = chat_history
+            .last()
             .filter(|m| m.role == "USER")
             .map(|m| m.message.clone())
             .ok_or_else(|| AiError::InvalidRequest {
@@ -198,13 +210,17 @@ impl CompletionProvider for CohereProvider {
             })?;
 
         // Remove the last message from history
-        let chat_history = chat_history[..chat_history.len()-1].to_vec();
+        let chat_history = chat_history[..chat_history.len() - 1].to_vec();
 
         let cohere_request = CohereChatRequest {
             message,
             model: Some(request.model.clone()),
             preamble,
-            chat_history: if chat_history.is_empty() { None } else { Some(chat_history) },
+            chat_history: if chat_history.is_empty() {
+                None
+            } else {
+                Some(chat_history)
+            },
             temperature: request.temperature,
             max_tokens: request.max_tokens,
             p: request.top_p,
@@ -212,7 +228,8 @@ impl CompletionProvider for CohereProvider {
             stream: true,
         };
 
-        let response = self.client
+        let response = self
+            .client
             .post(url)
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("Content-Type", "application/json")
@@ -238,42 +255,38 @@ impl CompletionProvider for CohereProvider {
                 Ok(chunk) => {
                     // Parse the server-sent event
                     let text = String::from_utf8_lossy(&chunk);
-                    
+
                     // Cohere uses server-sent events format
                     if let Some(json_str) = text.strip_prefix("data: ") {
                         match serde_json::from_str::<CohereStreamEvent>(json_str.trim()) {
                             Ok(event) => {
                                 match event.event_type.as_str() {
-                                    "text-generation" => {
-                                        Ok(StreamChunk {
-                                            id: "cohere_stream".to_string(),
-                                            choices: vec![crate::StreamChoice {
-                                                index: 0,
-                                                delta: crate::Delta {
-                                                    role: None,
-                                                    content: event.text,
-                                                    tool_calls: None,
-                                                },
-                                                finish_reason: None,
-                                            }],
-                                            model: None,
-                                        })
-                                    }
-                                    "stream-end" => {
-                                        Ok(StreamChunk {
-                                            id: "cohere_stream".to_string(),
-                                            choices: vec![crate::StreamChoice {
-                                                index: 0,
-                                                delta: crate::Delta {
-                                                    role: None,
-                                                    content: None,
-                                                    tool_calls: None,
-                                                },
-                                                finish_reason: Some("stop".to_string()),
-                                            }],
-                                            model: None,
-                                        })
-                                    }
+                                    "text-generation" => Ok(StreamChunk {
+                                        id: "cohere_stream".to_string(),
+                                        choices: vec![crate::StreamChoice {
+                                            index: 0,
+                                            delta: crate::Delta {
+                                                role: None,
+                                                content: event.text,
+                                                tool_calls: None,
+                                            },
+                                            finish_reason: None,
+                                        }],
+                                        model: None,
+                                    }),
+                                    "stream-end" => Ok(StreamChunk {
+                                        id: "cohere_stream".to_string(),
+                                        choices: vec![crate::StreamChoice {
+                                            index: 0,
+                                            delta: crate::Delta {
+                                                role: None,
+                                                content: None,
+                                                tool_calls: None,
+                                            },
+                                            finish_reason: Some("stop".to_string()),
+                                        }],
+                                        model: None,
+                                    }),
                                     _ => {
                                         // Ignore other event types
                                         Ok(StreamChunk {
@@ -402,7 +415,7 @@ mod tests {
         // This will fail without an API key, which is expected
         let result = CohereProvider::new(Some("test-key".to_string()));
         assert!(result.is_ok());
-        
+
         let provider = result.unwrap();
         assert_eq!(provider.name(), "cohere");
         assert_eq!(provider.default_model(), "command-r-plus");

@@ -1,5 +1,5 @@
 use lib_ai::{
-    agent::{ AgentBuilder, InMemoryStore, tools::CalculatorTool },
+    agent::{tools::CalculatorTool, AgentBuilder, InMemoryStore},
     providers::OpenAIProvider,
 };
 use tokio;
@@ -17,7 +17,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let agent = AgentBuilder::new()
         .provider(provider)
         .prompt(
-            "You are a helpful assistant with access to a calculator. Use it when needed for math."
+            "You are a helpful assistant with access to a calculator. Use it when needed for math.",
         )
         .model("gpt-4o-mini")
         .temperature(0.7)
@@ -35,7 +35,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Second interaction (will use memory)
     println!("User: What was the result of the previous calculation?");
-    let response = agent.execute("What was the result of the previous calculation?").await?;
+    let response = agent
+        .execute("What was the result of the previous calculation?")
+        .await?;
     println!("Assistant: {}\n", response);
 
     // Third interaction with multiple calculations

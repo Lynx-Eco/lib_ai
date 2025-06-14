@@ -1,218 +1,192 @@
-use thiserror::Error;
-use std::time::{Duration, SystemTime};
-use std::sync::{Arc, Mutex};
-use std::collections::{VecDeque, HashMap};
-use std::future::Future;
-use tokio::time::sleep;
-use rand::Rng;
-use serde::{Deserialize, Serialize};
-use std::time::Instant;
 use async_trait::async_trait;
 use futures::stream::Stream;
+use rand::Rng;
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, VecDeque};
+use std::future::Future;
 use std::pin::Pin;
+use std::sync::{Arc, Mutex};
+use std::time::Instant;
+use std::time::{Duration, SystemTime};
+use thiserror::Error;
+use tokio::time::sleep;
 
 /// Comprehensive error types for AI operations
 #[derive(Error, Debug, Clone)]
 pub enum AiError {
     // Network and Connection Errors
     #[error("Network request failed: {message}")]
-    NetworkError { 
-        message: String, 
+    NetworkError {
+        message: String,
         retryable: bool,
         status_code: Option<u16>,
     },
-    
+
     #[error("Connection timeout after {timeout:?}")]
-    TimeoutError { 
-        timeout: Duration,
-        retryable: bool,
-    },
-    
+    TimeoutError { timeout: Duration, retryable: bool },
+
     #[error("Connection refused to {endpoint}")]
     ConnectionRefused { endpoint: String },
-    
+
     // Authentication Errors
     #[error("Invalid API key for provider {provider}")]
     InvalidApiKey { provider: String },
-    
+
     #[error("Authentication failed: {reason}")]
     AuthenticationFailed { reason: String },
-    
+
     #[error("API key expired for provider {provider}")]
     ApiKeyExpired { provider: String },
-    
+
     // Rate Limiting Errors
     #[error("Rate limit exceeded. Retry after {retry_after:?}")]
-    RateLimitExceeded { 
+    RateLimitExceeded {
         retry_after: Option<Duration>,
         daily_limit: Option<u64>,
         requests_remaining: Option<u64>,
     },
-    
+
     #[error("Quota exceeded for provider {provider}")]
-    QuotaExceeded { 
+    QuotaExceeded {
         provider: String,
         quota_type: String, // "monthly", "daily", "requests", "tokens"
         reset_time: Option<SystemTime>,
     },
-    
+
     // Request/Response Errors
     #[error("Invalid request: {message}")]
-    InvalidRequest { 
+    InvalidRequest {
         message: String,
         field: Option<String>,
         code: Option<String>,
     },
-    
+
     #[error("Malformed response: {message}")]
-    MalformedResponse { 
+    MalformedResponse {
         message: String,
         raw_response: Option<String>,
     },
-    
+
     #[error("Unsupported model {model} for provider {provider}")]
-    UnsupportedModel { 
+    UnsupportedModel {
         model: String,
         provider: String,
         available_models: Vec<String>,
     },
-    
+
     // Provider-Specific Errors
     #[error("Provider error from {provider}: {message}")]
-    ProviderError { 
+    ProviderError {
         provider: String,
         message: String,
         error_code: Option<String>,
         retryable: bool,
     },
-    
+
     #[error("Service unavailable for provider {provider}")]
-    ServiceUnavailable { 
+    ServiceUnavailable {
         provider: String,
         retry_after: Option<Duration>,
     },
-    
+
     // Content and Safety Errors
     #[error("Content filtered by safety policies")]
-    ContentFiltered { 
+    ContentFiltered {
         reason: String,
         category: Option<String>,
     },
-    
+
     #[error("Request too large: {size} bytes (max: {max_size} bytes)")]
-    RequestTooLarge { 
-        size: usize,
-        max_size: usize,
-    },
-    
+    RequestTooLarge { size: usize, max_size: usize },
+
     #[error("Response too large: {size} bytes")]
     ResponseTooLarge { size: usize },
-    
+
     // Token and Usage Errors
     #[error("Token limit exceeded: {tokens} tokens (max: {max_tokens})")]
-    TokenLimitExceeded { 
-        tokens: u32,
-        max_tokens: u32,
-    },
-    
+    TokenLimitExceeded { tokens: u32, max_tokens: u32 },
+
     #[error("Insufficient tokens: {available} available, {required} required")]
-    InsufficientTokens { 
-        available: u32,
-        required: u32,
-    },
-    
+    InsufficientTokens { available: u32, required: u32 },
+
     // Serialization/Deserialization Errors
     #[error("Serialization error: {message}")]
-    SerializationError { 
-        message: String,
-    },
-    
+    SerializationError { message: String },
+
     #[error("JSON parsing error: {message}")]
-    JsonError { 
+    JsonError {
         message: String,
         line: Option<usize>,
         column: Option<usize>,
     },
-    
+
     // Stream and Async Errors
     #[error("Stream error: {message}")]
-    StreamError { 
-        message: String,
-        retryable: bool,
-    },
-    
+    StreamError { message: String, retryable: bool },
+
     #[error("Stream interrupted after {chunks_received} chunks")]
     StreamInterrupted { chunks_received: usize },
-    
+
     // Tool and Function Errors
     #[error("Tool execution failed: {tool_name}")]
-    ToolExecutionError { 
+    ToolExecutionError {
         tool_name: String,
         message: String,
         retryable: bool,
     },
-    
+
     #[error("Tool not found: {tool_name}")]
-    ToolNotFound { 
+    ToolNotFound {
         tool_name: String,
         available_tools: Vec<String>,
     },
-    
+
     #[error("Invalid tool parameters for {tool_name}: {message}")]
-    InvalidToolParameters { 
+    InvalidToolParameters {
         tool_name: String,
         message: String,
         expected_schema: Option<String>,
     },
-    
+
     // Memory and Context Errors
     #[error("Memory operation failed: {operation}")]
-    MemoryError { 
-        operation: String,
-        message: String,
-    },
-    
+    MemoryError { operation: String, message: String },
+
     #[error("Context too large: {size} tokens (max: {max_size})")]
-    ContextTooLarge { 
-        size: usize,
-        max_size: usize,
-    },
-    
+    ContextTooLarge { size: usize, max_size: usize },
+
     // Configuration Errors
     #[error("Invalid configuration: {field}")]
-    ConfigurationError { 
+    ConfigurationError {
         field: String,
         message: String,
         suggestion: Option<String>,
     },
-    
+
     #[error("Missing required configuration: {field}")]
-    MissingConfiguration { 
-        field: String,
-        description: String,
-    },
-    
+    MissingConfiguration { field: String, description: String },
+
     // Circuit Breaker Errors
     #[error("Circuit breaker open for {service}. Failure rate: {failure_rate:.2}%")]
-    CircuitBreakerOpen { 
+    CircuitBreakerOpen {
         service: String,
         failure_rate: f64,
         retry_after: Duration,
     },
-    
+
     // Internal Errors
     #[error("Internal error: {message}")]
-    InternalError { 
+    InternalError {
         message: String,
         component: Option<String>,
     },
-    
+
     #[error("Not implemented: {feature}")]
     NotImplemented { feature: String },
-    
+
     // Custom errors for extensibility
     #[error("Custom error: {message}")]
-    Custom { 
+    Custom {
         message: String,
         error_type: String,
         metadata: HashMap<String, String>,
@@ -231,26 +205,26 @@ impl AiError {
             AiError::StreamError { retryable, .. } => *retryable,
             AiError::ToolExecutionError { retryable, .. } => *retryable,
             AiError::StreamInterrupted { .. } => true,
-            
+
             // Non-retryable errors
-            AiError::InvalidApiKey { .. } |
-            AiError::AuthenticationFailed { .. } |
-            AiError::ApiKeyExpired { .. } |
-            AiError::QuotaExceeded { .. } |
-            AiError::InvalidRequest { .. } |
-            AiError::UnsupportedModel { .. } |
-            AiError::ContentFiltered { .. } |
-            AiError::RequestTooLarge { .. } |
-            AiError::TokenLimitExceeded { .. } |
-            AiError::InsufficientTokens { .. } |
-            AiError::SerializationError { .. } |
-            AiError::JsonError { .. } |
-            AiError::ToolNotFound { .. } |
-            AiError::InvalidToolParameters { .. } |
-            AiError::ConfigurationError { .. } |
-            AiError::MissingConfiguration { .. } |
-            AiError::NotImplemented { .. } => false,
-            
+            AiError::InvalidApiKey { .. }
+            | AiError::AuthenticationFailed { .. }
+            | AiError::ApiKeyExpired { .. }
+            | AiError::QuotaExceeded { .. }
+            | AiError::InvalidRequest { .. }
+            | AiError::UnsupportedModel { .. }
+            | AiError::ContentFiltered { .. }
+            | AiError::RequestTooLarge { .. }
+            | AiError::TokenLimitExceeded { .. }
+            | AiError::InsufficientTokens { .. }
+            | AiError::SerializationError { .. }
+            | AiError::JsonError { .. }
+            | AiError::ToolNotFound { .. }
+            | AiError::InvalidToolParameters { .. }
+            | AiError::ConfigurationError { .. }
+            | AiError::MissingConfiguration { .. }
+            | AiError::NotImplemented { .. } => false,
+
             // Depends on specific context
             AiError::ConnectionRefused { .. } => true,
             AiError::MalformedResponse { .. } => false,
@@ -261,10 +235,10 @@ impl AiError {
             AiError::InternalError { .. } => true,
             AiError::Custom { metadata, .. } => {
                 metadata.get("retryable").map_or(false, |v| v == "true")
-            },
+            }
         }
     }
-    
+
     /// Get retry delay if applicable
     pub fn retry_after(&self) -> Option<Duration> {
         match self {
@@ -274,52 +248,51 @@ impl AiError {
             _ => None,
         }
     }
-    
+
     /// Get error severity level
     pub fn severity(&self) -> ErrorSeverity {
         match self {
-            AiError::InternalError { .. } |
-            AiError::MemoryError { .. } => ErrorSeverity::Critical,
-            
-            AiError::InvalidApiKey { .. } |
-            AiError::AuthenticationFailed { .. } |
-            AiError::ApiKeyExpired { .. } |
-            AiError::QuotaExceeded { .. } |
-            AiError::ConfigurationError { .. } |
-            AiError::MissingConfiguration { .. } => ErrorSeverity::High,
-            
-            AiError::NetworkError { .. } |
-            AiError::TimeoutError { .. } |
-            AiError::ConnectionRefused { .. } |
-            AiError::RateLimitExceeded { .. } |
-            AiError::ServiceUnavailable { .. } |
-            AiError::CircuitBreakerOpen { .. } |
-            AiError::StreamError { .. } => ErrorSeverity::Medium,
-            
-            AiError::InvalidRequest { .. } |
-            AiError::UnsupportedModel { .. } |
-            AiError::ContentFiltered { .. } |
-            AiError::TokenLimitExceeded { .. } |
-            AiError::ToolNotFound { .. } |
-            AiError::InvalidToolParameters { .. } => ErrorSeverity::Low,
-            
+            AiError::InternalError { .. } | AiError::MemoryError { .. } => ErrorSeverity::Critical,
+
+            AiError::InvalidApiKey { .. }
+            | AiError::AuthenticationFailed { .. }
+            | AiError::ApiKeyExpired { .. }
+            | AiError::QuotaExceeded { .. }
+            | AiError::ConfigurationError { .. }
+            | AiError::MissingConfiguration { .. } => ErrorSeverity::High,
+
+            AiError::NetworkError { .. }
+            | AiError::TimeoutError { .. }
+            | AiError::ConnectionRefused { .. }
+            | AiError::RateLimitExceeded { .. }
+            | AiError::ServiceUnavailable { .. }
+            | AiError::CircuitBreakerOpen { .. }
+            | AiError::StreamError { .. } => ErrorSeverity::Medium,
+
+            AiError::InvalidRequest { .. }
+            | AiError::UnsupportedModel { .. }
+            | AiError::ContentFiltered { .. }
+            | AiError::TokenLimitExceeded { .. }
+            | AiError::ToolNotFound { .. }
+            | AiError::InvalidToolParameters { .. } => ErrorSeverity::Low,
+
             _ => ErrorSeverity::Low,
         }
     }
-    
+
     /// Get the provider associated with this error, if any
     pub fn provider(&self) -> Option<&str> {
         match self {
-            AiError::InvalidApiKey { provider } |
-            AiError::ApiKeyExpired { provider } |
-            AiError::QuotaExceeded { provider, .. } |
-            AiError::UnsupportedModel { provider, .. } |
-            AiError::ProviderError { provider, .. } |
-            AiError::ServiceUnavailable { provider, .. } => Some(provider),
+            AiError::InvalidApiKey { provider }
+            | AiError::ApiKeyExpired { provider }
+            | AiError::QuotaExceeded { provider, .. }
+            | AiError::UnsupportedModel { provider, .. }
+            | AiError::ProviderError { provider, .. }
+            | AiError::ServiceUnavailable { provider, .. } => Some(provider),
             _ => None,
         }
     }
-    
+
     /// Create a custom error with metadata
     pub fn custom(message: impl Into<String>, error_type: impl Into<String>) -> Self {
         AiError::Custom {
@@ -328,10 +301,13 @@ impl AiError {
             metadata: HashMap::new(),
         }
     }
-    
+
     /// Add metadata to a custom error
     pub fn with_metadata(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
-        if let AiError::Custom { ref mut metadata, .. } = self {
+        if let AiError::Custom {
+            ref mut metadata, ..
+        } = self
+        {
             metadata.insert(key.into(), value.into());
         }
         self
@@ -360,11 +336,12 @@ impl ErrorSeverity {
 // Conversion from common error types
 impl From<reqwest::Error> for AiError {
     fn from(err: reqwest::Error) -> Self {
-        let retryable = err.is_timeout() || err.is_connect() || 
-                       err.status().map_or(false, |s| s.is_server_error());
-        
+        let retryable = err.is_timeout()
+            || err.is_connect()
+            || err.status().map_or(false, |s| s.is_server_error());
+
         let status_code = err.status().map(|s| s.as_u16());
-        
+
         if err.is_timeout() {
             AiError::TimeoutError {
                 timeout: Duration::from_secs(30), // Default timeout
@@ -412,25 +389,25 @@ pub type Result<T> = std::result::Result<T, AiError>;
 pub struct RetryConfig {
     /// Maximum number of retry attempts
     pub max_attempts: u32,
-    
+
     /// Initial delay between retries
     pub initial_delay: Duration,
-    
+
     /// Maximum delay between retries
     pub max_delay: Duration,
-    
+
     /// Backoff strategy
     pub backoff: BackoffStrategy,
-    
+
     /// Jitter strategy to avoid thundering herd
     pub jitter: JitterStrategy,
-    
+
     /// Whether to respect retry-after headers
     pub respect_retry_after: bool,
-    
+
     /// Maximum total time to spend retrying
     pub max_total_time: Option<Duration>,
-    
+
     /// Custom retry condition
     pub retry_condition: RetryCondition,
 }
@@ -455,13 +432,13 @@ impl Default for RetryConfig {
 pub enum BackoffStrategy {
     /// Fixed delay between retries
     Fixed,
-    
+
     /// Linear backoff: delay = initial_delay * attempt
     Linear,
-    
+
     /// Exponential backoff: delay = initial_delay * multiplier^attempt
     Exponential { multiplier: f64 },
-    
+
     /// Custom delays for each attempt
     Custom(Vec<Duration>),
 }
@@ -471,16 +448,16 @@ pub enum BackoffStrategy {
 pub enum JitterStrategy {
     /// No jitter
     None,
-    
+
     /// Add random jitter up to the full delay
     Full,
-    
+
     /// Add jitter up to half the delay
     Half,
-    
+
     /// Add fixed amount of jitter
     Fixed(Duration),
-    
+
     /// Custom jitter function
     Decorrelated,
 }
@@ -490,16 +467,16 @@ pub enum JitterStrategy {
 pub enum RetryCondition {
     /// Use default retry logic based on error type
     Default,
-    
+
     /// Always retry
     Always,
-    
+
     /// Never retry
     Never,
-    
+
     /// Retry only specific error types
     ErrorTypes(Vec<String>),
-    
+
     /// Custom condition function
     Custom,
 }
@@ -626,24 +603,21 @@ impl RetryExecutor {
         // Calculate base delay based on backoff strategy
         let base_delay = match &self.config.backoff {
             BackoffStrategy::Fixed => self.config.initial_delay,
-            
-            BackoffStrategy::Linear => {
-                Duration::from_millis(
-                    self.config.initial_delay.as_millis() as u64 * context.attempt as u64
-                )
-            }
-            
+
+            BackoffStrategy::Linear => Duration::from_millis(
+                self.config.initial_delay.as_millis() as u64 * context.attempt as u64,
+            ),
+
             BackoffStrategy::Exponential { multiplier } => {
-                let delay_ms = self.config.initial_delay.as_millis() as f64 
+                let delay_ms = self.config.initial_delay.as_millis() as f64
                     * multiplier.powi((context.attempt - 1) as i32);
                 Duration::from_millis(delay_ms as u64)
             }
-            
-            BackoffStrategy::Custom(delays) => {
-                delays.get((context.attempt - 1) as usize)
-                    .copied()
-                    .unwrap_or(self.config.max_delay)
-            }
+
+            BackoffStrategy::Custom(delays) => delays
+                .get((context.attempt - 1) as usize)
+                .copied()
+                .unwrap_or(self.config.max_delay),
         };
 
         // Apply jitter
@@ -656,35 +630,37 @@ impl RetryExecutor {
     /// Apply jitter to the delay
     fn apply_jitter(&self, delay: Duration, context: &RetryContext) -> Duration {
         let mut rng = rand::thread_rng();
-        
+
         match &self.config.jitter {
             JitterStrategy::None => delay,
-            
+
             JitterStrategy::Full => {
                 let jitter_ms = rng.gen_range(0..=delay.as_millis() as u64);
                 Duration::from_millis(jitter_ms)
             }
-            
+
             JitterStrategy::Half => {
                 let base_ms = delay.as_millis() as u64 / 2;
                 let jitter_ms = base_ms + rng.gen_range(0..=base_ms);
                 Duration::from_millis(jitter_ms)
             }
-            
+
             JitterStrategy::Fixed(jitter_amount) => {
                 let jitter_ms = rng.gen_range(0..=jitter_amount.as_millis() as u64);
                 delay + Duration::from_millis(jitter_ms)
             }
-            
+
             JitterStrategy::Decorrelated => {
                 // Decorrelated jitter: next_delay = random(base_delay, last_delay * 3)
-                let last_delay = context.delay_history.last()
+                let last_delay = context
+                    .delay_history
+                    .last()
                     .copied()
                     .unwrap_or(self.config.initial_delay);
-                    
+
                 let min_delay = delay.as_millis() as u64;
                 let max_delay = (last_delay.as_millis() as u64 * 3).max(min_delay);
-                
+
                 let jitter_ms = rng.gen_range(min_delay..=max_delay);
                 Duration::from_millis(jitter_ms)
             }
@@ -772,19 +748,19 @@ impl Default for RetryConfigBuilder {
 pub struct CircuitBreakerConfig {
     /// Failure threshold to open the circuit (percentage)
     pub failure_threshold: f64,
-    
+
     /// Minimum number of requests before considering failure rate
     pub minimum_request_count: u32,
-    
+
     /// Time window to measure failure rate
     pub measurement_window: Duration,
-    
+
     /// Time to wait before attempting to close the circuit
     pub recovery_timeout: Duration,
-    
+
     /// Maximum number of requests to allow in half-open state
     pub half_open_max_requests: u32,
-    
+
     /// Success threshold to close the circuit in half-open state
     pub success_threshold: f64,
 }
@@ -807,12 +783,10 @@ impl Default for CircuitBreakerConfig {
 pub enum CircuitState {
     /// Circuit is closed - requests are allowed
     Closed,
-    
+
     /// Circuit is open - requests are rejected
-    Open {
-        opened_at: Instant,
-    },
-    
+    Open { opened_at: Instant },
+
     /// Circuit is half-open - limited requests are allowed to test recovery
     HalfOpen {
         opened_at: Instant,
@@ -863,7 +837,7 @@ impl CircuitBreaker {
         }
 
         let start_time = Instant::now();
-        
+
         // Execute the operation
         match operation().await {
             Ok(result) => {
@@ -884,7 +858,7 @@ impl CircuitBreaker {
 
         match &*state {
             CircuitState::Closed => true,
-            
+
             CircuitState::Open { opened_at } => {
                 if now.duration_since(*opened_at) >= self.config.recovery_timeout {
                     // Transition to half-open state
@@ -898,7 +872,7 @@ impl CircuitBreaker {
                     false
                 }
             }
-            
+
             CircuitState::HalfOpen { attempts, .. } => {
                 *attempts < self.config.half_open_max_requests
             }
@@ -908,15 +882,20 @@ impl CircuitBreaker {
     /// Record a successful request
     fn record_success(&self, request_time: Instant) {
         self.add_request_outcome(RequestOutcome::Success(request_time));
-        
+
         let mut state = self.state.lock().unwrap();
-        
-        if let CircuitState::HalfOpen { opened_at, attempts, successes } = &*state {
+
+        if let CircuitState::HalfOpen {
+            opened_at,
+            attempts,
+            successes,
+        } = &*state
+        {
             let new_attempts = attempts + 1;
             let new_successes = successes + 1;
-            
+
             let success_rate = (new_successes as f64 / new_attempts as f64) * 100.0;
-            
+
             if new_attempts >= self.config.half_open_max_requests {
                 if success_rate >= self.config.success_threshold {
                     // Close the circuit
@@ -942,9 +921,9 @@ impl CircuitBreaker {
     /// Record a failed request
     fn record_failure(&self, request_time: Instant) {
         self.add_request_outcome(RequestOutcome::Failure(request_time));
-        
+
         let mut state = self.state.lock().unwrap();
-        
+
         match &*state {
             CircuitState::Closed => {
                 // Check if we should open the circuit
@@ -954,14 +933,14 @@ impl CircuitBreaker {
                     };
                 }
             }
-            
+
             CircuitState::HalfOpen { .. } => {
                 // Any failure in half-open state reopens the circuit
                 *state = CircuitState::Open {
                     opened_at: Instant::now(),
                 };
             }
-            
+
             CircuitState::Open { .. } => {
                 // Already open, nothing to do
             }
@@ -972,20 +951,20 @@ impl CircuitBreaker {
     fn add_request_outcome(&self, outcome: RequestOutcome) {
         let mut history = self.request_history.lock().unwrap();
         let now = Instant::now();
-        
+
         // Remove old entries outside the measurement window
         while let Some(front) = history.front() {
             let request_time = match front {
                 RequestOutcome::Success(time) | RequestOutcome::Failure(time) => *time,
             };
-            
+
             if now.duration_since(request_time) > self.config.measurement_window {
                 history.pop_front();
             } else {
                 break;
             }
         }
-        
+
         // Add the new outcome
         history.push_back(outcome);
     }
@@ -993,11 +972,11 @@ impl CircuitBreaker {
     /// Check if the circuit should be opened based on failure rate
     fn should_open_circuit(&self) -> bool {
         let history = self.request_history.lock().unwrap();
-        
+
         if history.len() < self.config.minimum_request_count as usize {
             return false;
         }
-        
+
         let failure_rate = self.calculate_failure_rate();
         failure_rate >= self.config.failure_threshold
     }
@@ -1005,20 +984,20 @@ impl CircuitBreaker {
     /// Calculate the current failure rate
     fn calculate_failure_rate(&self) -> f64 {
         let history = self.request_history.lock().unwrap();
-        
+
         if history.is_empty() {
             return 0.0;
         }
-        
+
         let mut failures = 0;
         let total = history.len();
-        
+
         for outcome in history.iter() {
             if matches!(outcome, RequestOutcome::Failure(_)) {
                 failures += 1;
             }
         }
-        
+
         (failures as f64 / total as f64) * 100.0
     }
 
@@ -1031,24 +1010,24 @@ impl CircuitBreaker {
     pub fn metrics(&self) -> CircuitBreakerMetrics {
         let state = self.state.lock().unwrap().clone();
         let history = self.request_history.lock().unwrap();
-        
+
         let mut successes = 0;
         let mut failures = 0;
-        
+
         for outcome in history.iter() {
             match outcome {
                 RequestOutcome::Success(_) => successes += 1,
                 RequestOutcome::Failure(_) => failures += 1,
             }
         }
-        
+
         let total_requests = successes + failures;
         let failure_rate = if total_requests > 0 {
             (failures as f64 / total_requests as f64) * 100.0
         } else {
             0.0
         };
-        
+
         CircuitBreakerMetrics {
             service_name: self.service_name.clone(),
             state: state.clone(),
@@ -1064,7 +1043,7 @@ impl CircuitBreaker {
     pub fn reset(&self) {
         let mut state = self.state.lock().unwrap();
         *state = CircuitState::Closed;
-        
+
         let mut history = self.request_history.lock().unwrap();
         history.clear();
     }
@@ -1081,7 +1060,7 @@ impl CircuitBreaker {
     pub fn close(&self) {
         let mut state = self.state.lock().unwrap();
         *state = CircuitState::Closed;
-        
+
         let mut history = self.request_history.lock().unwrap();
         history.clear();
     }
@@ -1116,10 +1095,14 @@ impl CircuitBreakerRegistry {
     /// Get or create a circuit breaker for a service
     pub fn get_or_create(&self, service_name: &str) -> Arc<CircuitBreaker> {
         let mut breakers = self.breakers.lock().unwrap();
-        
-        breakers.entry(service_name.to_string())
+
+        breakers
+            .entry(service_name.to_string())
             .or_insert_with(|| {
-                Arc::new(CircuitBreaker::new(service_name, self.default_config.clone()))
+                Arc::new(CircuitBreaker::new(
+                    service_name,
+                    self.default_config.clone(),
+                ))
             })
             .clone()
     }
@@ -1139,9 +1122,7 @@ impl CircuitBreakerRegistry {
     /// Get all circuit breaker metrics
     pub fn get_all_metrics(&self) -> Vec<CircuitBreakerMetrics> {
         let breakers = self.breakers.lock().unwrap();
-        breakers.values()
-            .map(|breaker| breaker.metrics())
-            .collect()
+        breakers.values().map(|breaker| breaker.metrics()).collect()
     }
 
     /// Reset all circuit breakers
@@ -1224,27 +1205,35 @@ impl ResilientProvider {
 
 #[async_trait]
 impl crate::CompletionProvider for ResilientProvider {
-    async fn complete(&self, request: crate::CompletionRequest) -> Result<crate::CompletionResponse> {
+    async fn complete(
+        &self,
+        request: crate::CompletionRequest,
+    ) -> Result<crate::CompletionResponse> {
         let circuit_breaker = self.circuit_breaker.clone();
         let inner = self.inner.clone();
         let request_clone = request.clone();
 
         // Execute with circuit breaker protection
-        circuit_breaker.execute(|| {
-            let inner = inner.clone();
-            let request = request_clone.clone();
-            
-            // Execute with retry logic
-            self.retry_executor.execute(move || {
+        circuit_breaker
+            .execute(|| {
                 let inner = inner.clone();
-                let request = request.clone();
-                
-                async move {
-                    // Transform provider-specific errors to our enhanced error types
-                    inner.complete(request).await.map_err(|e| enhance_error(e, inner.name()))
-                }
+                let request = request_clone.clone();
+
+                // Execute with retry logic
+                self.retry_executor.execute(move || {
+                    let inner = inner.clone();
+                    let request = request.clone();
+
+                    async move {
+                        // Transform provider-specific errors to our enhanced error types
+                        inner
+                            .complete(request)
+                            .await
+                            .map_err(|e| enhance_error(e, inner.name()))
+                    }
+                })
             })
-        }).await
+            .await
     }
 
     async fn complete_stream(
@@ -1257,14 +1246,19 @@ impl crate::CompletionProvider for ResilientProvider {
 
         // For streaming, we apply circuit breaker but not retry logic
         // (since streams are typically long-lived)
-        circuit_breaker.execute(|| {
-            let inner = inner.clone();
-            let request = request_clone.clone();
-            
-            async move {
-                inner.complete_stream(request).await.map_err(|e| enhance_error(e, inner.name()))
-            }
-        }).await
+        circuit_breaker
+            .execute(|| {
+                let inner = inner.clone();
+                let request = request_clone.clone();
+
+                async move {
+                    inner
+                        .complete_stream(request)
+                        .await
+                        .map_err(|e| enhance_error(e, inner.name()))
+                }
+            })
+            .await
     }
 
     fn name(&self) -> &'static str {
@@ -1284,31 +1278,35 @@ impl crate::CompletionProvider for ResilientProvider {
 fn enhance_error(error: AiError, provider_name: &str) -> AiError {
     match error {
         // Already enhanced errors - pass through
-        e @ AiError::NetworkError { .. } |
-        e @ AiError::TimeoutError { .. } |
-        e @ AiError::RateLimitExceeded { .. } |
-        e @ AiError::InvalidApiKey { .. } |
-        e @ AiError::ProviderError { .. } => e,
-        
+        e @ AiError::NetworkError { .. }
+        | e @ AiError::TimeoutError { .. }
+        | e @ AiError::RateLimitExceeded { .. }
+        | e @ AiError::InvalidApiKey { .. }
+        | e @ AiError::ProviderError { .. } => e,
+
         // Enhance generic errors with provider context
-        AiError::Custom { message, error_type, metadata } => {
+        AiError::Custom {
+            message,
+            error_type,
+            metadata,
+        } => {
             let mut enhanced_metadata = metadata;
             enhanced_metadata.insert("provider".to_string(), provider_name.to_string());
-            
+
             AiError::Custom {
                 message,
                 error_type,
                 metadata: enhanced_metadata,
             }
         }
-        
+
         // Transform other errors to provider-specific errors
         e => AiError::ProviderError {
             provider: provider_name.to_string(),
             message: e.to_string(),
             error_code: None,
             retryable: e.is_retryable(),
-        }
+        },
     }
 }
 

@@ -1,10 +1,13 @@
 use async_trait::async_trait;
+use futures::stream::Stream;
 use reqwest::Client;
 use serde::Deserialize;
-use futures::stream::Stream;
 use std::pin::Pin;
 
-use crate::{CompletionProvider, CompletionRequest, CompletionResponse, StreamChunk, Result, AiError, providers::openai::OpenAIProvider};
+use crate::{
+    providers::openai::OpenAIProvider, AiError, CompletionProvider, CompletionRequest,
+    CompletionResponse, Result, StreamChunk,
+};
 
 pub struct OpenRouterProvider {
     openai_provider: OpenAIProvider,
@@ -18,7 +21,7 @@ impl OpenRouterProvider {
         Self {
             openai_provider: OpenAIProvider::with_base_url(
                 api_key.clone(),
-                "https://openrouter.ai/api/v1".to_string()
+                "https://openrouter.ai/api/v1".to_string(),
             ),
             client,
             api_key,
@@ -26,7 +29,8 @@ impl OpenRouterProvider {
     }
 
     pub async fn list_available_models(&self) -> Result<Vec<OpenRouterModel>> {
-        let response = self.client
+        let response = self
+            .client
             .get("https://openrouter.ai/api/v1/models")
             .header("Authorization", format!("Bearer {}", self.api_key))
             .send()
@@ -34,7 +38,12 @@ impl OpenRouterProvider {
 
         if !response.status().is_success() {
             let error_text = response.text().await?;
-            return Err(AiError::ProviderError { provider: "openrouter".to_string(), message: format!("OpenRouter API error: {}", error_text), error_code: None, retryable: true });
+            return Err(AiError::ProviderError {
+                provider: "openrouter".to_string(),
+                message: format!("OpenRouter API error: {}", error_text),
+                error_code: None,
+                retryable: true,
+            });
         }
 
         let models_response: OpenRouterModelsResponse = response.json().await?;

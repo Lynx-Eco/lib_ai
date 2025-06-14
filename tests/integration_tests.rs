@@ -1,8 +1,8 @@
 mod common;
 
 use lib_ai::{
-    providers::*, CompletionProvider, MessageContent, Role, Message,
-    ToolCall, ToolType, FunctionCall,
+    providers::*, CompletionProvider, FunctionCall, Message, MessageContent, Role, ToolCall,
+    ToolType,
 };
 use std::sync::Arc;
 
@@ -11,7 +11,7 @@ use std::sync::Arc;
 async fn test_provider_trait_consistency() {
     // This test just verifies compilation - that all providers implement CompletionProvider
     fn assert_provider<T: CompletionProvider>() {}
-    
+
     assert_provider::<OpenAIProvider>();
     assert_provider::<AnthropicProvider>();
     assert_provider::<GeminiProvider>();
@@ -23,13 +23,28 @@ async fn test_provider_trait_consistency() {
 #[tokio::test]
 async fn test_dynamic_provider_switching() {
     let providers: Vec<(String, Arc<dyn CompletionProvider>)> = vec![
-        ("OpenAI".to_string(), Arc::new(OpenAIProvider::new("test-key".to_string()))),
-        ("Anthropic".to_string(), Arc::new(AnthropicProvider::new("test-key".to_string()))),
-        ("Gemini".to_string(), Arc::new(GeminiProvider::new("test-key".to_string()))),
-        ("xAI".to_string(), Arc::new(XAIProvider::new("test-key".to_string()))),
-        ("OpenRouter".to_string(), Arc::new(OpenRouterProvider::new("test-key".to_string()))),
+        (
+            "OpenAI".to_string(),
+            Arc::new(OpenAIProvider::new("test-key".to_string())),
+        ),
+        (
+            "Anthropic".to_string(),
+            Arc::new(AnthropicProvider::new("test-key".to_string())),
+        ),
+        (
+            "Gemini".to_string(),
+            Arc::new(GeminiProvider::new("test-key".to_string())),
+        ),
+        (
+            "xAI".to_string(),
+            Arc::new(XAIProvider::new("test-key".to_string())),
+        ),
+        (
+            "OpenRouter".to_string(),
+            Arc::new(OpenRouterProvider::new("test-key".to_string())),
+        ),
     ];
-    
+
     for (name, provider) in providers {
         assert_eq!(provider.name(), name);
         assert!(!provider.default_model().is_empty());
@@ -47,7 +62,7 @@ async fn test_tool_result_message() {
         tool_calls: None,
         tool_call_id: Some("call_123".to_string()),
     };
-    
+
     // Verify serialization
     let json = serde_json::to_string(&tool_result).unwrap();
     assert!(json.contains("tool"));
@@ -60,23 +75,25 @@ async fn test_message_content_variants() {
     // Test text content
     let text_content = MessageContent::text("Hello, world!");
     assert_eq!(text_content.as_text(), Some("Hello, world!"));
-    
+
     // Test multipart content
     let parts_content = MessageContent::Parts(vec![
-        lib_ai::ContentPart::Text { text: "Check out this image:".to_string() },
-        lib_ai::ContentPart::Image { 
+        lib_ai::ContentPart::Text {
+            text: "Check out this image:".to_string(),
+        },
+        lib_ai::ContentPart::Image {
             image_url: lib_ai::ImageUrl {
                 url: "https://example.com/image.jpg".to_string(),
                 detail: Some("high".to_string()),
-            }
+            },
         },
     ]);
     assert!(parts_content.as_text().is_none());
-    
+
     // Test serialization
     let text_json = serde_json::to_string(&text_content).unwrap();
     assert!(text_json.contains("Hello, world!"));
-    
+
     let parts_json = serde_json::to_string(&parts_content).unwrap();
     assert!(parts_json.contains("text"));
     assert!(parts_json.contains("image_url"));
@@ -93,13 +110,13 @@ async fn test_tool_call_creation() {
             arguments: r#"{"location": "San Francisco", "unit": "celsius"}"#.to_string(),
         },
     };
-    
+
     // Verify serialization
     let json = serde_json::to_string(&tool_call).unwrap();
     assert!(json.contains("call_abc123"));
     assert!(json.contains("get_weather"));
     assert!(json.contains("San Francisco"));
-    
+
     // Verify deserialization
     let parsed: ToolCall = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed.id, "call_abc123");
@@ -110,37 +127,39 @@ async fn test_tool_call_creation() {
 #[tokio::test]
 async fn test_error_handling() {
     use lib_ai::AiError;
-    
+
     // Test error variants
     let errors = vec![
-        AiError::InvalidApiKey { provider: "test".to_string() },
-        AiError::RateLimitExceeded { 
+        AiError::InvalidApiKey {
+            provider: "test".to_string(),
+        },
+        AiError::RateLimitExceeded {
             retry_after: None,
             daily_limit: None,
             requests_remaining: None,
         },
-        AiError::InvalidRequest { 
+        AiError::InvalidRequest {
             message: "Missing required field".to_string(),
             field: None,
             code: None,
         },
-        AiError::ProviderError { 
+        AiError::ProviderError {
             provider: "test".to_string(),
             message: "Service unavailable".to_string(),
             error_code: None,
             retryable: false,
         },
-        AiError::StreamError { 
+        AiError::StreamError {
             message: "Connection lost".to_string(),
             retryable: false,
         },
     ];
-    
+
     for error in errors {
         // All errors should have reasonable string representations
         let error_str = error.to_string();
         assert!(!error_str.is_empty());
-        
+
         // Test debug formatting
         let debug_str = format!("{:?}", error);
         assert!(!debug_str.is_empty());
@@ -153,14 +172,12 @@ async fn test_request_builder_pattern() {
     // Start with minimal request
     let mut request = lib_ai::CompletionRequest {
         model: "test-model".to_string(),
-        messages: vec![
-            Message {
-                role: Role::User,
-                content: MessageContent::text("Hello"),
-                tool_calls: None,
-                tool_call_id: None,
-            }
-        ],
+        messages: vec![Message {
+            role: Role::User,
+            content: MessageContent::text("Hello"),
+            tool_calls: None,
+            tool_call_id: None,
+        }],
         temperature: None,
         max_tokens: None,
         stream: None,
@@ -173,12 +190,12 @@ async fn test_request_builder_pattern() {
         response_format: None,
         json_schema: None,
     };
-    
+
     // Add options incrementally
     request.temperature = Some(0.7);
     request.max_tokens = Some(100);
     request.stream = Some(true);
-    
+
     // Verify all fields are set correctly
     assert_eq!(request.temperature, Some(0.7));
     assert_eq!(request.max_tokens, Some(100));
@@ -195,11 +212,11 @@ async fn test_model_info() {
         Box::new(XAIProvider::new("test".to_string())),
         Box::new(OpenRouterProvider::new("test".to_string())),
     ];
-    
+
     for provider in providers {
         let default_model = provider.default_model();
         let available_models = provider.available_models();
-        
+
         // Default model should be in available models
         assert!(
             available_models.contains(&default_model),
