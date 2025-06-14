@@ -8,7 +8,7 @@ fn get_provider() -> Option<ReplicateProvider> {
     dotenv().ok();
 
     if let Ok(api_token) = env::var("REPLICATE_API_TOKEN") {
-        Some(ReplicateProvider::new(api_token))
+        ReplicateProvider::new(Some(api_token)).ok()
     } else {
         eprintln!("Skipping Replicate tests: REPLICATE_API_TOKEN not set");
         None

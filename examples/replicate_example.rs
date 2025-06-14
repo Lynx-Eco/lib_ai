@@ -65,11 +65,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Token usage
             if let Some(usage) = response.usage {
                 println!("\n📊 Token Usage:");
-                println!("  Input tokens: {}", usage.input_tokens);
-                println!("  Output tokens: {}", usage.output_tokens);
+                println!("  Prompt tokens: {}", usage.prompt_tokens);
+                println!("  Completion tokens: {}", usage.completion_tokens);
                 println!(
                     "  Total tokens: {}",
-                    usage.input_tokens + usage.output_tokens
+                    usage.total_tokens
                 );
             }
         }

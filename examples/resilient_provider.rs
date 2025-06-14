@@ -10,7 +10,6 @@ use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    env_logger::init();
 
     // Get API key from environment
     let api_key =
