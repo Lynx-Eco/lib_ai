@@ -216,7 +216,7 @@ impl AgentTracer {
         let mut traces = self.traces.write().unwrap();
         let trace_spans = traces
             .entry(event.trace_id.clone())
-            .or_insert_with(Vec::new);
+            .or_default();
 
         // Limit spans per trace
         if trace_spans.len() < self.config.max_spans_per_trace {

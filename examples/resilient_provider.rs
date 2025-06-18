@@ -1,8 +1,8 @@
 use lib_ai::{
-    error::{BackoffStrategy, JitterStrategy},
-    error::{CircuitBreakerConfig, ResilientProvider, ResilientProviderBuilder, RetryConfig},
     providers::OpenAIProvider,
-    CompletionProvider, CompletionRequest, Message, MessageContent, Role,
+    BackoffStrategy, CircuitBreakerConfig, CompletionProvider, CompletionRequest, JitterStrategy,
+    Message, MessageContent, ResilientProvider, ResilientProviderBuilder, RetryConfig,
+    RetryCondition, Role,
 };
 use std::env;
 use std::sync::Arc;
@@ -46,7 +46,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         jitter: JitterStrategy::Full,
         respect_retry_after: true,
         max_total_time: Some(Duration::from_secs(120)),
-        retry_condition: lib_ai::error::RetryCondition::Default,
+        retry_condition: RetryCondition::Default,
     };
 
     let circuit_config = CircuitBreakerConfig {

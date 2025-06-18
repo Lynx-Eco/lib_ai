@@ -76,6 +76,7 @@ impl CostTracker {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn record_usage(
         &mut self,
         provider: &str,

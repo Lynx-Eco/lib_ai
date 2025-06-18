@@ -234,7 +234,7 @@ impl AiError {
             AiError::CircuitBreakerOpen { .. } => false, // Handle differently
             AiError::InternalError { .. } => true,
             AiError::Custom { metadata, .. } => {
-                metadata.get("retryable").map_or(false, |v| v == "true")
+                metadata.get("retryable").is_some_and(|v| v == "true")
             }
         }
     }
@@ -338,7 +338,7 @@ impl From<reqwest::Error> for AiError {
     fn from(err: reqwest::Error) -> Self {
         let retryable = err.is_timeout()
             || err.is_connect()
-            || err.status().map_or(false, |s| s.is_server_error());
+            || err.status().is_some_and(|s| s.is_server_error());
 
         let status_code = err.status().map(|s| s.as_u16());
 
@@ -490,6 +490,12 @@ pub struct RetryContext {
     pub delay_history: Vec<Duration>,
 }
 
+impl Default for RetryContext {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RetryContext {
     pub fn new() -> Self {
         Self {
@@ -531,7 +537,7 @@ impl RetryExecutor {
             // Check if we've exceeded maximum total time
             if let Some(max_time) = self.config.max_total_time {
                 if context.total_elapsed >= max_time {
-                    return Err(last_error.unwrap_or_else(|| AiError::TimeoutError {
+                    return Err(last_error.unwrap_or(AiError::TimeoutError {
                         timeout: max_time,
                         retryable: false,
                     }));

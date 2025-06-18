@@ -163,7 +163,7 @@ impl CompletionProvider for AnthropicProvider {
             model: request.model,
             messages: messages
                 .into_iter()
-                .map(|m| convert_message_to_anthropic(m))
+                .map(convert_message_to_anthropic)
                 .collect(),
             max_tokens: request.max_tokens.unwrap_or(1024),
             temperature: request.temperature,
@@ -290,7 +290,7 @@ impl CompletionProvider for AnthropicProvider {
             model: request.model,
             messages: messages
                 .into_iter()
-                .map(|m| convert_message_to_anthropic(m))
+                .map(convert_message_to_anthropic)
                 .collect(),
             max_tokens: request.max_tokens.unwrap_or(1024),
             temperature: request.temperature,
@@ -460,8 +460,7 @@ fn split_system_message(messages: Vec<Message>) -> (Option<String>, Vec<Message>
 
 fn parse_anthropic_sse(data: &str) -> Result<Option<StreamChunk>> {
     for line in data.lines() {
-        if line.starts_with("event: ") {
-            let event_type = &line[7..];
+        if let Some(event_type) = line.strip_prefix("event: ") {
 
             // Find the corresponding data line
             if let Some(data_line) = data.lines().find(|l| l.starts_with("data: ")) {

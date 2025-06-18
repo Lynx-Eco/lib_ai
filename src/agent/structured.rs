@@ -77,6 +77,15 @@ pub struct TypedAgentBuilder<T> {
     _phantom: PhantomData<T>,
 }
 
+impl<T> Default for TypedAgentBuilder<T>
+where
+    T: DeserializeOwned + StructuredProvider + Send,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T> TypedAgentBuilder<T>
 where
     T: DeserializeOwned + StructuredProvider + Send,
@@ -225,6 +234,5 @@ mod tests {
             .temperature(0.7);
 
         // Builder should compile and be usable
-        assert!(true);
     }
 }

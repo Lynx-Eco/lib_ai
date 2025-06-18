@@ -3,18 +3,21 @@ use lib_ai::{
     providers::ReplicateProvider, CompletionProvider, CompletionRequest, Message, MessageContent,
     Role,
 };
-use std::env;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv().ok();
 
-    // Get API token from environment
-    let api_token = env::var("REPLICATE_API_TOKEN")
-        .expect("Please set REPLICATE_API_TOKEN environment variable");
-
-    // Create Replicate provider
-    let provider = ReplicateProvider::new(Some(api_token))?;
+    // Try to create Replicate provider
+    let provider = match ReplicateProvider::new(None) {
+        Ok(p) => p,
+        Err(_) => {
+            eprintln!("❌ Error: REPLICATE_API_TOKEN environment variable not set.");
+            eprintln!("   Please set it with: export REPLICATE_API_TOKEN=your-api-token");
+            eprintln!("   Or create a .env file with REPLICATE_API_TOKEN=your-api-token");
+            return Ok(());
+        }
+    };
 
     println!("🔄 Replicate Provider Example");
     println!("============================");

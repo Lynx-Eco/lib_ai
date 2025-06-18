@@ -172,6 +172,12 @@ pub struct WebFetchTool {
     client: reqwest::Client,
 }
 
+impl Default for WebFetchTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WebFetchTool {
     pub fn new() -> Self {
         Self {
@@ -232,6 +238,12 @@ impl ToolExecutor for WebFetchTool {
 /// A simple key-value store tool
 pub struct KeyValueStoreTool {
     store: Arc<tokio::sync::Mutex<HashMap<String, String>>>,
+}
+
+impl Default for KeyValueStoreTool {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl KeyValueStoreTool {

@@ -28,6 +28,12 @@ pub struct TokenUsage {
     pub cache_write_tokens: u64,
 }
 
+impl Default for TokenUsage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TokenUsage {
     pub fn new() -> Self {
         Self {
@@ -109,9 +115,9 @@ impl MetricsCollector {
 
     pub fn create_agent_metrics(&self, agent_id: String) {
         let mut metrics = self.metrics.write().unwrap();
-        if !metrics.contains_key(&agent_id) {
+        if let std::collections::hash_map::Entry::Vacant(e) = metrics.entry(agent_id) {
             let agent_metrics = AgentMetrics {
-                agent_id: agent_id.clone(),
+                agent_id: e.key().clone(),
                 total_requests: 0,
                 successful_requests: 0,
                 failed_requests: 0,
@@ -123,7 +129,7 @@ impl MetricsCollector {
                 created_at: Utc::now(),
                 last_updated: Utc::now(),
             };
-            metrics.insert(agent_id, agent_metrics);
+            e.insert(agent_metrics);
 
             // Update global metrics
             let mut global = self.global_metrics.write().unwrap();
@@ -131,6 +137,7 @@ impl MetricsCollector {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn record_request(
         &self,
         agent_id: &str,

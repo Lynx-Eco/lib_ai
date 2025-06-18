@@ -3,18 +3,21 @@ use lib_ai::{
     providers::TogetherProvider, CompletionProvider, CompletionRequest, Message, MessageContent,
     Role,
 };
-use std::env;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv().ok();
 
-    // Get API key from environment
-    let api_key =
-        env::var("TOGETHER_API_KEY").expect("Please set TOGETHER_API_KEY environment variable");
-
-    // Create Together provider
-    let provider = TogetherProvider::new(Some(api_key))?;
+    // Try to create Together provider
+    let provider = match TogetherProvider::new(None) {
+        Ok(p) => p,
+        Err(_) => {
+            eprintln!("❌ Error: TOGETHER_API_KEY environment variable not set.");
+            eprintln!("   Please set it with: export TOGETHER_API_KEY=your-api-key");
+            eprintln!("   Or create a .env file with TOGETHER_API_KEY=your-api-key");
+            return Ok(());
+        }
+    };
 
     println!("🤝 Together AI Provider Example");
     println!("==============================");

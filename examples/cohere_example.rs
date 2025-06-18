@@ -2,18 +2,21 @@ use dotenv::dotenv;
 use lib_ai::{
     providers::CohereProvider, CompletionProvider, CompletionRequest, Message, MessageContent, Role,
 };
-use std::env;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv().ok();
 
-    // Get API key from environment
-    let api_key =
-        env::var("COHERE_API_KEY").expect("Please set COHERE_API_KEY environment variable");
-
-    // Create Cohere provider
-    let provider = CohereProvider::new(Some(api_key))?;
+    // Try to create Cohere provider
+    let provider = match CohereProvider::new(None) {
+        Ok(p) => p,
+        Err(_) => {
+            eprintln!("❌ Error: COHERE_API_KEY environment variable not set.");
+            eprintln!("   Please set it with: export COHERE_API_KEY=your-api-key");
+            eprintln!("   Or create a .env file with COHERE_API_KEY=your-api-key");
+            return Ok(());
+        }
+    };
 
     println!("🤖 Cohere Provider Example");
     println!("=======================");

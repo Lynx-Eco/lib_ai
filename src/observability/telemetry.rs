@@ -197,6 +197,12 @@ pub trait Exporter: Send + Sync {
 /// Console exporter for debugging
 pub struct ConsoleExporter;
 
+impl Default for ConsoleExporter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ConsoleExporter {
     pub fn new() -> Self {
         Self

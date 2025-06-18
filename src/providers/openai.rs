@@ -341,8 +341,7 @@ impl CompletionProvider for OpenAIProvider {
 
 fn parse_openai_sse(data: &str) -> Result<Option<StreamChunk>> {
     for line in data.lines() {
-        if line.starts_with("data: ") {
-            let json_str = &line[6..];
+        if let Some(json_str) = line.strip_prefix("data: ") {
             if json_str == "[DONE]" {
                 return Ok(None);
             }

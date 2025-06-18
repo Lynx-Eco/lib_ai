@@ -78,8 +78,7 @@ impl Memory for InMemoryStore {
 
         let mut matches: Vec<(usize, &MemoryEntry)> = entries
             .iter()
-            .enumerate()
-            .filter_map(|(_idx, entry)| {
+            .filter_map(|entry| {
                 let score = query_words
                     .iter()
                     .filter(|word| entry.input.to_lowercase().contains(&word.to_lowercase()))
